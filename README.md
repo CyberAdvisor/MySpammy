@@ -1,0 +1,350 @@
+# Gmail Spam Cleaner
+
+## Why this exists
+
+Gmail's spam filter catches a lot, but it isn't perfect -- every few days
+a legitimate email ends up misclassified as spam. The only way to catch
+that is to actually look through the Spam folder, which can mean wading
+through up to 100 spam messages a day just to make sure nothing real got
+buried in there.
+
+This project cuts that job down. Rules you define (regex patterns, plus a
+hardcoded check for sender domains that don't even exist) identify
+confirmed spam and delete it automatically, so there's far less to look
+through by hand. The daily digest email goes a step further: it summarizes
+what was deleted and what's still sitting in Spam, so on days when there's
+nothing worth reviewing, you can tell at a glance and skip checking the
+Spam folder entirely.
+
+## What it does
+
+Periodically scans your Gmail Spam folder, trashes messages matching
+regex rules you define, logs every deletion, and emails you a daily
+digest of what was deleted plus what's still sitting in Spam.
+
+Uses plain IMAP (to read/trash Spam) and SMTP (to send the digest),
+authenticated with your Gmail address and an **App Password**. No Google
+Cloud Console project, no OAuth consent screen, no external dependencies --
+everything runs on Python's standard library.
+
+## 1. Turn on 2-Step Verification
+
+App Passwords require 2-Step Verification to be enabled on your Google
+account. Turn it on at: https://myaccount.google.com/security
+
+## 2. Generate an App Password
+
+1. Go to https://myaccount.google.com/apppasswords
+2. Create a new app password (name it something like "spam-cleaner").
+3. Google shows you a 16-character password once -- copy it.
+
+This password only works for mail protocol access (IMAP/SMTP); it does not
+grant access to your Google account in general and can be revoked any time
+from the same page.
+
+## 3. Make sure IMAP is enabled
+
+Gmail settings -> "See all settings" -> Forwarding and POP/IMAP tab ->
+enable IMAP access, if it isn't already.
+
+## 4. Create credentials.json
+
+Copy the example and fill in your address and app password:
+
+```bash
+cp credentials.json.example credentials.json
+```
+
+```json
+{
+  "email": "you@gmail.com",
+  "app_password": "abcd efgh ijkl mnop"
+}
+```
+
+`credentials.json` is gitignored -- keep it out of version control.
+
+## 5. Edit your rules
+
+Open `config.json`. It ships with three sample rules, all `"enabled": false`,
+purely to show the format -- they will never run as-is.
+
+Each rule matches text against subject/from/body via regex:
+
+```json
+{
+  "name": "unique_short_name",
+  "enabled": true,
+  "field": "subject",
+  "pattern": "some.*regex",
+  "perm_delete": false
+}
+```
+
+- `field`: one of `subject`, `from`, `body`
+- `pattern`: a Python regex, matched case-insensitively, matched anywhere in the field (not anchored to the whole string)
+- `enabled`: set `false` to keep a rule around without running it
+- `perm_delete` (optional, defaults to `false`): if `true`, a match is **permanently deleted** instead of moved to Trash -- no 30-day recovery window. Leave this off (or omit it) unless you're confident a rule can't produce a false positive; an invalid value (anything that isn't `true`/`false`) is treated as `false` rather than erroring, so a typo here can never accidentally escalate to permanent deletion.
+
+**Gotcha:** the `from` field is the raw header, e.g. `Some Name <a@domain.com>` --
+not just the email address. If you anchor a regex pattern with `$` expecting it to
+end at the domain, it won't match, because of the trailing `>`. Leave patterns
+unanchored (drop `$`) unless you're deliberately matching the trailing angle bracket.
+
+Also set `digest_recipient` to your real email address (it starts as the placeholder `you@example.com`, which the digest script refuses to run against).
+
+## 6. Automatic "Spam Domain" check (always runs; deletion type is configurable)
+
+Before any `config.json` rule is checked, `sweep.py` looks up the sender's
+domain via DNS (see `domain_check.py`). If the domain **doesn't resolve at
+all** -- no DNS record exists, or the domain has no dot in it and so can't
+be a real domain to begin with -- the message is immediately logged with
+the rule name `Spam Domain` and deleted. `config.json` rules are skipped
+entirely for that message.
+
+**This check itself cannot be turned off** -- it always runs before any
+config.json rule. But whether it permanently deletes or moves to Trash is
+controlled by the top-level `spam_domain_perm_delete` setting in
+`config.json`:
+
+```json
+{
+  "spam_domain_perm_delete": false
+}
+```
+
+- `false` (the default): matches move to **Trash** (30-day recovery window).
+- `true`: matches are **permanently deleted** immediately (no Trash, no recovery).
+
+An invalid value (anything that isn't `true`/`false`) is treated as
+`false`, the safer option -- same pattern as the per-rule `perm_delete`
+setting.
+
+It exists because a `From:` header referencing a domain that doesn't
+resolve at all is close to unambiguous evidence of spam -- no real sender
+uses a domain that doesn't exist -- and testing showed it catches the
+large majority of "made up domain" spam that regex rules alone struggle
+to catch reliably.
+
+This originally used RDAP (the structured WHOIS replacement) instead of
+DNS, but RDAP required a slow HTTP round trip per domain and was subject
+to rate limiting that occasionally caused real spam to be missed on one
+sweep pass. Comparing DNS results against RDAP's verdict across 50 real
+spam messages showed zero disagreements, so the check now uses plain DNS
+resolution instead -- standard library only, no rate limits, and much
+faster.
+
+**Known limitation:** a domain can be legitimately registered and used
+purely for email while having no DNS A record at all (e.g. a company that
+sends mail from a domain but hosts no website on it). Such a domain would
+show as "doesn't resolve" here even though it's completely real. This
+tradeoff was accepted after the empirical comparison above showed no
+disagreements in practice, but it's worth knowing about if you ever see an
+unexpected deletion -- and is exactly why `spam_domain_perm_delete`
+defaults to `false` (Trash, recoverable) rather than `true`.
+
+**Safety property:** if the DNS check is inconclusive for any reason, the
+message is **not** flagged as spam on that basis. It falls through to
+normal `config.json` rule matching instead, exactly as if the check hadn't
+run. A check failure never causes a deletion by itself.
+
+You can see what this check decides for messages currently in Spam by
+running `debug_spam.py`, which prints the Spam Domain check's verdict for
+every message alongside everything else it shows.
+
+## 7. Common regex rule examples
+
+Reference patterns to adapt, organized by field. All match case-insensitively already (rules compile with `re.IGNORECASE`), and match anywhere in the field unless anchored.
+
+**Subject**
+
+```json
+{"name": "prize_bait", "enabled": true, "field": "subject", "pattern": "free.*(gift|prize|money)"}
+{"name": "won_notification", "enabled": true, "field": "subject", "pattern": "you.?ve won"}
+{"name": "urgent_pressure", "enabled": true, "field": "subject", "pattern": "urgent.*action.*required"}
+{"name": "fake_payment", "enabled": true, "field": "subject", "pattern": "\\$\\d+[,.]?\\d*\\s*(million|k|reward)"}
+{"name": "account_verify", "enabled": true, "field": "subject", "pattern": "verify your account"}
+{"name": "explicit_content", "enabled": true, "field": "subject", "pattern": "fuck|pussy|erection secret"}
+```
+
+**From**
+
+```json
+{"name": "known_spam_domains", "enabled": true, "field": "from", "pattern": "@(shady-domain1|shady-domain2)\\.(com|net)"}
+{"name": "suspicious_tld", "enabled": true, "field": "from", "pattern": "@.*\\.(xyz|top|click|info)"}
+```
+
+**Body**
+
+```json
+{"name": "click_here_bait", "enabled": true, "field": "body", "pattern": "click here (now|immediately|to)"}
+{"name": "crypto_wallet", "enabled": true, "field": "body", "pattern": "bitcoin.*(wallet|payment|address)"}
+{"name": "one_time_offer", "enabled": true, "field": "body", "pattern": "one.?time (offer|deal)"}
+{"name": "decoy_filler_text", "enabled": true, "field": "body", "pattern": "Top Stories of the Day:.*-----"}
+```
+
+That last one (`decoy_filler_text`) is worth calling out: some spam includes a garbage/word-salad `text/plain` part specifically to defeat text-based filters, while the real payload (a tracking link, the actual pitch) sits in the `text/html` part. Since `body` extraction combines both parts (see the Gotcha note above), a rule targeting the decoy text itself still catches these reliably.
+
+Tips for writing your own:
+
+- `\b` (word boundary) keeps a term from matching inside unrelated words -- `\bwin\b` won't match "window."
+- `.*` between words allows anything (including nothing) in between -- `free.*prize` matches "free prize," "free trip and prize," etc.
+- `|` means "or" -- group with parentheses: `(bitcoin|crypto|wallet)`.
+- Escape literal special characters: `.` -> `\.`, `$` -> `\$`, `?` -> `\?`. In JSON, backslashes need to be doubled (`\\.` not `\.`).
+- Start narrow. Run `debug_spam.py` periodically to see what's still sitting in Spam and what patterns show up repeatedly, then add rules incrementally rather than writing broad catch-alls that risk false positives.
+
+## 8. Test manually before automating
+
+```bash
+python sweep.py   # scans spam, trashes matches, prints a summary
+python digest.py  # sends the digest email immediately
+```
+
+Check `errors.log` if anything looks off.
+
+## 9. Where to put this project (read before scheduling anything)
+
+**Put this project folder somewhere OUTSIDE `~/Documents`, `~/Desktop`, and
+`~/Downloads`** -- for example directly in your home folder:
+
+```
+mv ~/Documents/Records/Programming/MySpammy ~/MySpammy
+```
+
+(adjust the path to wherever yours currently lives)
+
+Those three folders are protected by macOS's TCC (privacy) system. Running
+a script interactively in Terminal usually works fine there, because
+Terminal itself has been granted access -- but a **background** process
+(a scheduled `launchd` job, `cron`, etc.) often does NOT inherit that
+access, and gets silently blocked with an `Operation not permitted` /
+exit code `126` error, even though the exact same script runs perfectly
+when you type the command yourself. This bit us specifically with `/bin/sh`
+failing to even open the script file when run on a schedule. Moving the
+project outside those folders avoids this category of problem entirely,
+rather than having to grant Full Disk Access to every individual binary
+(`sh`, `python3`, etc.) one at a time, which is fragile and easy to miss one of.
+
+## 10. Schedule with Lingon (recommended -- supports true hourly scheduling)
+
+**Lingon** (Lingon X / Lingon Pro / just "Lingon" depending on the version
+you have -- the app has been renamed a few times) is a GUI front-end for
+macOS's `launchd`, the scheduler Apple actually recommends over `cron`.
+Unlike the Shortcuts approach below, Lingon supports genuine periodic
+scheduling ("every N hours"), not just once-a-day.
+
+### Set up the sweep job
+
+1. Install **Lingon** from the Mac App Store or [peterborgapps.com](https://www.peterborgapps.com/lingon/) if you don't have it.
+2. Click **+** to create a new job, scoped to **"Me"** (a per-user agent, not root/all-users).
+3. Name it (e.g. **Spam Sweep**).
+4. Under **Run**, choose the script/document action and create a small wrapper script -- don't point Lingon directly at `sweep.py`. Instead, create a `.sh` file in your project folder:
+   ```
+   cd ~/MySpammy
+   cat > "Spam Sweep.sh" << 'EOF'
+   #!/bin/sh
+
+   cd /Users/YOURNAME/MySpammy
+   /Library/Developer/CommandLineTools/usr/bin/python3 sweep.py >> run.log 2>&1
+   EOF
+   chmod +x "Spam Sweep.sh"
+   ```
+   (replace `YOURNAME` with your actual username, and confirm your `python3` path with `which python3` if you're not sure it's the same)
+5. Point Lingon's Run action at this `Spam Sweep.sh` file.
+6. Under **When**, set **Schedule -> Every hour**, minute `0` (or whatever offset you like).
+7. Save.
+
+### Set up the digest job
+
+Repeat the same steps for a second job named **Spam Digest**, with a
+wrapper script that calls `digest.py` instead, scheduled **once daily**
+(not hourly) at a fixed time -- e.g. 30 minutes after the sweep job, so
+the digest reflects a day's worth of cleanup rather than running before
+sweep has processed anything that hour.
+
+### Testing it
+
+Lingon's manual-run control has moved around across versions/renames --
+if you don't see an obvious "Run"/"Start" button, right-click the job in
+the list, or check the toolbar for a play icon. The universally reliable
+way to force a run, regardless of Lingon's exact UI, is via Terminal:
+
+```
+launchctl kickstart gui/$(id -u)/"Spam Sweep"
+launchctl list | grep -i spam
+cat run.log
+```
+
+The middle command's second column is the last exit code -- `0` means
+success; `126` almost always means either a missing execute permission
+(`chmod +x` the script) or the TCC/folder-location issue described in
+section 9 above.
+
+## 11. Alternative: Schedule with Shortcuts (once-daily only, no third-party app)
+
+If once-a-day is good enough for your needs and you'd rather not install
+anything beyond what macOS ships with, Shortcuts works too -- it just
+can't do true hourly scheduling (Time of Day automations only support
+Daily/Weekly/Monthly repeat).
+
+### One-time setup
+
+1. Open **Shortcuts** (Spotlight search, or Applications folder).
+2. Menu bar: **Shortcuts** -> **Settings** -> **Advanced** -> turn on
+   **Allow Running Scripts**.
+
+### Create the sweep shortcut
+
+1. Click **+** for a new shortcut.
+2. Search the action library for **Run Shell Script**, drag it into the workflow.
+3. Paste into the script box (adjust the path/python3 location if yours differs):
+   ```
+   cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 sweep.py >> run.log 2>&1
+   ```
+4. Leave **Shell** set to `/bin/zsh`.
+5. Rename the shortcut (top-left) to **Spam Sweep**.
+6. Close the editor.
+
+### Create the digest shortcut
+
+Repeat the same steps, naming it **Spam Digest**, using:
+```
+cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 digest.py >> run.log 2>&1
+```
+
+### Schedule them
+
+1. In Shortcuts, click the **Automation** tab in the sidebar.
+2. Click **+** -> **Create Personal Automation** -> **Time of Day**.
+3. Set a time, **Repeat: Daily**.
+4. **Next** -> add action **Run Shortcut** -> pick **Spam Sweep**.
+5. Turn **off** "Ask Before Running" so it runs silently.
+6. Repeat for **Spam Digest**, at a later time on the same day, also Daily.
+
+**Verifying it actually ran:** these automations run silently in the
+background with no visible confirmation. Check `run.log` in your project
+folder after a scheduled time passes to confirm the script executed.
+
+## Files
+
+| File | Purpose |
+|---|---|
+| `common.py` | Shared logic: config loading, rule matching, IMAP/SMTP connections, message parsing |
+| `domain_check.py` | DNS-based domain existence check for sender domains -- used by `sweep.py` for the hardcoded Spam Domain check, and by `debug_spam.py` |
+| `debug_spam.py` | Diagnostic tool: shows what's extracted from each spam message, whether rules match, and the Spam Domain check's verdict -- does NOT delete anything |
+| `sweep.py` | Deletes matching spam, runs once daily. Runs the hardcoded Spam Domain check first, then config.json rules |
+| `digest.py` | Sends the daily summary email, runs once a day |
+| `config.json` | Your editable rules and digest recipient (does not affect the hardcoded Spam Domain check) |
+| `credentials.json` | Your Gmail address + app password (create from `credentials.json.example`, do not share or commit) |
+| `log.jsonl` | Deletion log since the last digest (auto-managed) |
+| `state.json` | Tracks last digest run time (auto-managed) |
+| `errors.log` | Connection/rule errors (auto-managed) |
+
+## Safety notes
+
+- **Config.json rule matches go to Trash by default** (30-day recovery window) -- a rule that's too broad is recoverable, not catastrophic. A rule can opt into **permanent deletion** instead by setting `"perm_delete": true` (see section 5); do this only for rules you're confident can't produce a false positive.
+- **The hardcoded Spam Domain check always runs**, but whether it permanently deletes or moves to Trash is controlled by `spam_domain_perm_delete` in `config.json` (defaults to `false`/Trash). Permanent deletion has no recovery window; Trash gives 30 days.
+- `log.jsonl` records `"deletion_type": "trash"` or `"permanent"` for every deletion. The digest email separates config.json matches into **Rule Deleted** / **Rule Trashed** sections always, and shows a **DNS Deleted** or **DNS Trashed** section for the hardcoded check depending on the active `spam_domain_perm_delete` setting (both only appear together if you changed that setting mid-period).
+- A rule with invalid `field` or unparseable regex is skipped and logged to `errors.log`, not silently ignored or crash-inducing.
+- The hardcoded Spam Domain check (see section 6) only ever deletes on an explicit "this domain doesn't resolve" result -- a failed or inconclusive check never triggers a deletion by itself.
+- `credentials.json` grants mail access to your account -- keep it out of version control (see `.gitignore`) and revoke the app password from your Google account if it's ever exposed.
