@@ -196,8 +196,8 @@ Tips for writing your own:
 ## 8. Test manually before automating
 
 ```bash
-python sweep.py   # scans spam, trashes matches, prints a summary
-python digest.py  # sends the digest email immediately
+python3 sweep.py   # scans spam, trashes matches, prints a summary
+python3 digest.py  # sends the digest email immediately
 ```
 
 Check `errors.log` if anything looks off.
