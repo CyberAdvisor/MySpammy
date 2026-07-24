@@ -325,6 +325,12 @@ cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 digest.py >
 background with no visible confirmation. Check `run.log` in your project
 folder after a scheduled time passes to confirm the script executed.
 
+**`run.log` resets itself once a day.** Every `sweep.py` run appends a
+line, but `digest.py` clears the file at the start of each of its runs
+before adding its own completion line -- so `run.log` never grows
+unbounded, and after a digest run it'll show just that one fresh entry
+rather than the whole day's accumulated sweep history.
+
 ## Files
 
 | File | Purpose |
@@ -339,6 +345,7 @@ folder after a scheduled time passes to confirm the script executed.
 | `log.jsonl` | Deletion log since the last digest (auto-managed) |
 | `state.json` | Tracks last digest run time (auto-managed) |
 | `errors.log` | Connection/rule errors (auto-managed) |
+| `run.log` | Sweep/digest completion log written by your scheduler's shell redirect (not by the Python scripts directly) -- reset by `digest.py` at the start of each of its runs, so it never grows unbounded |
 
 ## Safety notes
 

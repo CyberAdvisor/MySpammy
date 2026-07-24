@@ -31,6 +31,7 @@ from common import (
     clear_log,
     read_error_log,
     clear_error_log,
+    clear_run_log,
     load_state,
     save_state,
     logger,
@@ -198,6 +199,11 @@ def run():
         raise SystemExit("Set a real 'digest_recipient' in config.json before running digest.py.")
 
     creds = load_credentials()
+
+    # Reset run.log for this run -- see clear_run_log()'s docstring for why
+    # this is safe even though the shell wrapper's own stdout redirect for
+    # this process is a separate, already-open append-mode file handle.
+    clear_run_log()
 
     # Capture errors.log before this run's own operations can add to it, so
     # what's reported is errors accumulated since the last digest (mostly

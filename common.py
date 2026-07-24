@@ -40,6 +40,7 @@ CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 LOG_JSONL_PATH = os.path.join(BASE_DIR, "log.jsonl")
 STATE_PATH = os.path.join(BASE_DIR, "state.json")
 ERROR_LOG_PATH = os.path.join(BASE_DIR, "errors.log")
+RUN_LOG_PATH = os.path.join(BASE_DIR, "run.log")
 
 # Errors go to a dedicated file so a broken rule or connection hiccup never
 # gets lost in stdout when run as a background automation.
@@ -476,3 +477,25 @@ def clear_error_log() -> None:
     correctly after this truncation rather than leaving a gap.
     """
     open(ERROR_LOG_PATH, "w", encoding="utf-8").close()
+
+
+def clear_run_log() -> None:
+    """Truncate run.log so it doesn't grow forever.
+
+    run.log isn't written by this Python code directly -- it's populated by
+    the shell wrapper script's own `>> run.log 2>&1` redirect around each
+    sweep.py/digest.py invocation (see README section 10/11). Because
+    that's a plain append with nothing ever resetting it, the file would
+    otherwise accumulate one line per run indefinitely.
+
+    Called at the start of digest.py's run, before its own completion
+    line is printed. Safe due to the same append-mode semantics as
+    clear_error_log(): truncating the file here doesn't disturb the
+    current process's own stdout redirect, which is a separate,
+    already-open file description that will still append correctly (at
+    the new, now-empty end of file) when this run's completion line is
+    printed later. The net effect is that run.log ends up containing just
+    that one fresh entry for this digest run.
+    """
+    open(RUN_LOG_PATH, "w", encoding="utf-8").close()
+
