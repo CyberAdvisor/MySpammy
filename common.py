@@ -101,13 +101,17 @@ def save_config(config: dict, path: str = CONFIG_PATH) -> None:
 def record_rule_hit(config: dict, rule_name: str, date_str: str) -> bool:
     """Set 'last_hit' = date_str on the config.json rule named rule_name.
 
-    Returns True if a matching rule was found and updated, False
-    otherwise -- e.g. rule_name is the hardcoded "Spam Domain" check,
-    which has no corresponding entry in config.json's rules list and so
-    is never tracked here.
+    Returns True only if this actually changed the stored value -- if the
+    rule already has last_hit == date_str (e.g. hit more than once in the
+    same run, or hit again later the same day in a separate run),
+    returns False so sweep.py doesn't rewrite config.json for a no-op
+    change. Also returns False if rule_name has no corresponding
+    config.json entry -- e.g. the hardcoded "Spam Domain" check.
     """
     for rule in config.get("rules", []):
         if rule.get("name") == rule_name:
+            if rule.get("last_hit") == date_str:
+                return False
             rule["last_hit"] = date_str
             return True
     return False
