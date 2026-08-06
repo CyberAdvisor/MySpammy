@@ -85,6 +85,7 @@ Each rule matches text against subject/from/body via regex:
 - `pattern`: a Python regex, matched case-insensitively, matched anywhere in the field (not anchored to the whole string)
 - `enabled`: set `false` to keep a rule around without running it
 - `perm_delete` (optional, defaults to `false`): if `true`, a match is **permanently deleted** instead of moved to Trash -- no 30-day recovery window. Leave this off (or omit it) unless you're confident a rule can't produce a false positive; an invalid value (anything that isn't `true`/`false`) is treated as `false` rather than erroring, so a typo here can never accidentally escalate to permanent deletion.
+- `last_hit` (auto-managed, do not set by hand): the date (Mountain Time) `sweep.py` last saw this rule match a message. Added automatically the first time a rule matches, and updated on every match after that. `config.json` is only rewritten on days a rule actually matched, so a rule with an old (or missing) `last_hit` is a rule you can review for possibly being stale/no-longer-needed. This does not apply to the hardcoded Spam Domain check (section 6), which has no `config.json` entry to update.
 
 **Gotcha:** the `from` field is the raw header, e.g. `Some Name <a@domain.com>` --
 not just the email address. If you anchor a regex pattern with `$` expecting it to

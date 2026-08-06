@@ -6,23 +6,29 @@ automation.
 Before config.json rules are checked at all, every message's sender domain
 is checked via DNS: if the domain is confirmed NOT to resolve (no A record
 at all, or the domain has no dot and so can't be a real domain), the
-message is hardcoded-flagged as "Spam Domain" and deleted -- this check
-itself always runs and cannot be turned off via config.json. Whether the
-match is permanently deleted or moved to Trash is controlled by the
-top-level "spam_domain_perm_delete" setting (default false -> Trash;
-see common.get_spam_domain_perm_delete). If the check is inconclusive
-(DNS error, unexpected failure), the message is NOT flagged on that basis
+message is hardcoded-flagged as "Spam Domain" and PERMANENTLY DELETED
+immediately -- this is not configurable via config.json, and it is
+irreversible (no 30-day Trash recovery window; see
+common.permanently_delete_message). If the check is inconclusive (DNS
+error, unexpected failure), the message is NOT flagged on that basis
 alone; it falls through to normal config.json rule matching instead. A
 lookup failure must never cause a deletion by itself.
 
-Messages matched by a config.json rule go to Trash by default (see
-common.trash_message), giving a 30-day recovery window in case a rule is
-too broad. A rule can opt into permanent deletion instead by setting
-"perm_delete": true (see common.get_rule_perm_delete).
+Messages matched by a config.json rule instead go to Trash (see
+common.trash_message) rather than being permanently deleted -- Trash
+gives a 30-day recovery window in case a rule is too broad, which matters
+more for regex rules than for the DNS check, since DNS non-resolution is
+a much more mechanically certain signal.
 
 Every deletion is appended to log.jsonl for digest.py to summarize later.
 Connection and per-message errors go to errors.log rather than stopping
 the run.
+
+Each config.json rule that matches at least one message during a run gets
+its "last_hit" field set to today's date (Mountain Time). config.json is
+only rewritten if at least one rule was actually hit this run, to avoid
+needless diffs on days with no matches. This does not apply to the
+hardcoded Spam Domain check, which has no config.json entry.
 """
 from datetime import datetime, timezone
 
@@ -34,13 +40,15 @@ from common import (
     extract_fields,
     match_message,
     get_rule_perm_delete,
-    get_spam_domain_perm_delete,
     email_address,
     trash_message,
     permanently_delete_message,
     append_log,
     logger,
     local_timestamp,
+    local_date,
+    save_config,
+    record_rule_hit,
     SPAM_FOLDER,
 )
 from domain_check import check_domain_registration
@@ -60,7 +68,6 @@ def sender_domain(from_header: str) -> str:
 def run():
     config = load_config()
     rules = compile_rules(config)
-    spam_domain_perm_delete = get_spam_domain_perm_delete(config)
 
     if not rules:
         logger.warning("No enabled/valid config.json rules found -- only the hardcoded Spam Domain check will run.")
@@ -68,6 +75,8 @@ def run():
     imap = get_imap_connection()
     deleted_count = 0
     total_count = 0
+    today = local_date()
+    config_changed = False
 
     try:
         status, _ = imap.select(SPAM_FOLDER)
@@ -118,13 +127,11 @@ def run():
                 matched_rule = match_message(fields, rules)
 
             if matched_rule:
-                # Spam Domain matches permanently delete by default, but
-                # respect the global "spam_domain_perm_delete" override if
-                # set to false in config.json. Config.json rule matches go
-                # to Trash by default, but permanently delete instead if
-                # that specific rule has "perm_delete": true.
+                # Spam Domain matches always permanently delete. Config.json
+                # rule matches go to Trash by default, but permanently
+                # delete instead if that specific rule has "perm_delete": true.
                 if is_spam_domain:
-                    should_perm_delete = spam_domain_perm_delete
+                    should_perm_delete = True
                 else:
                     should_perm_delete = get_rule_perm_delete(rules, matched_rule)
 
@@ -151,6 +158,16 @@ def run():
                     "deletion_type": deletion_type,
                 })
                 deleted_count += 1
+
+                # Track last_hit for config.json rules only -- the hardcoded
+                # Spam Domain check (is_spam_domain) has no config.json
+                # entry to update.
+                if not is_spam_domain:
+                    if record_rule_hit(config, matched_rule, today):
+                        config_changed = True
+
+        if config_changed:
+            save_config(config)
 
     finally:
         try:

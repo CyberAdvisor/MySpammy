@@ -62,6 +62,13 @@ def local_timestamp() -> str:
     return datetime.now(MOUNTAIN_TZ).strftime("%Y-%m-%d %H:%M %Z")
 
 
+def local_date() -> str:
+    """Current date in Mountain Time, formatted as YYYY-MM-DD (e.g.
+    '2026-07-19'). Used for the config.json 'last_hit' field -- see
+    record_rule_hit()."""
+    return datetime.now(MOUNTAIN_TZ).strftime("%Y-%m-%d")
+
+
 @dataclass
 class CompiledRule:
     name: str
@@ -79,6 +86,31 @@ def load_config(path: str = CONFIG_PATH) -> dict:
     that's a hard stop, since there's nothing sensible to run without it."""
     with open(path, "r", encoding="utf-8") as f:
         return json.load(f)
+
+
+def save_config(config: dict, path: str = CONFIG_PATH) -> None:
+    """Write config back to config.json, matching the file's original
+    2-space-indent style. Used by sweep.py to persist 'last_hit' updates
+    (see record_rule_hit()) -- config.json is otherwise hand-edited by the
+    user, so this is only called when a rule was actually hit this run."""
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(config, f, indent=2)
+        f.write("\n")
+
+
+def record_rule_hit(config: dict, rule_name: str, date_str: str) -> bool:
+    """Set 'last_hit' = date_str on the config.json rule named rule_name.
+
+    Returns True if a matching rule was found and updated, False
+    otherwise -- e.g. rule_name is the hardcoded "Spam Domain" check,
+    which has no corresponding entry in config.json's rules list and so
+    is never tracked here.
+    """
+    for rule in config.get("rules", []):
+        if rule.get("name") == rule_name:
+            rule["last_hit"] = date_str
+            return True
+    return False
 
 
 def get_spam_domain_perm_delete(config: dict) -> bool:
