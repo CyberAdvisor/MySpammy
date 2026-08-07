@@ -1,5 +1,11 @@
 """
 Sends a daily digest email with these sections:
+  - Errors: any errors.log entries since the last digest
+  - Remaining: messages still sitting in Spam (condensed: From/Subject)
+  - Rule Trashed: config.json rule matches without perm_delete (moved to
+    Trash, same condensed format)
+  - Rule Deleted: config.json rule matches with "perm_delete": true
+    (permanently deleted, condensed to one line each: rule/From/Subject)
   - DNS Deleted and/or DNS Trashed: since spam_domain_perm_delete is a
     single global setting, normally only one of these will have any
     activity in a given digest period -- that one section is shown alone.
@@ -7,12 +13,6 @@ Sends a daily digest email with these sections:
     neither has activity, the section matching the currently active
     setting is shown at 0, so the digest still reflects which mode is in
     effect.
-  - Rule Deleted: config.json rule matches with "perm_delete": true
-    (permanently deleted, condensed to one line each: rule/From/Subject)
-  - Rule Trashed: config.json rule matches without perm_delete (moved to
-    Trash, same condensed format)
-  - Remaining: messages still sitting in Spam (condensed: From/Subject)
-  - Errors: any errors.log entries since the last digest
 
 Intended to run once every 24 hours via a scheduled automation, at a fixed time.
 """
@@ -117,6 +117,46 @@ def build_digest_body(
             lines.append("(none)")
         lines.append("")
 
+    # Errors
+    lines.append(f"Errors in the last 24 hours: {len(error_lines)}")
+    lines.append("-" * 50)
+    if error_lines:
+        for line in error_lines:
+            lines.append(f"  {line}")
+    else:
+        lines.append("(none)")
+    lines.append("")
+
+    # Remaining -- still sitting in Spam
+    lines.append(f"Remaining: {len(remaining)}")
+    lines.append("-" * 50)
+    if remaining:
+        for r in remaining:
+            lines.append(f"From: {r['from']} | Subject: {r['subject']}")
+    else:
+        lines.append("(none)")
+    lines.append("")
+
+    # Rule Trashed -- config.json matches with perm_delete: false/default (recoverable in Trash)
+    lines.append(f"Rule Trashed: {len(rule_trashed_entries)}")
+    lines.append("-" * 50)
+    if rule_trashed_entries:
+        for e in rule_trashed_entries:
+            lines.append(f"rule={e['matched_rule']} | From: {e['from']} | Subject: {e['subject']}")
+    else:
+        lines.append("(none)")
+    lines.append("")
+
+    # Rule Deleted -- config.json matches with perm_delete: true (permanent, no Trash recovery)
+    lines.append(f"Rule Deleted: {len(rule_deleted_entries)}")
+    lines.append("-" * 50)
+    if rule_deleted_entries:
+        for e in rule_deleted_entries:
+            lines.append(f"rule={e['matched_rule']} | From: {e['from']} | Subject: {e['subject']}")
+    else:
+        lines.append("(none)")
+    lines.append("")
+
     # spam_domain_perm_delete is a single global setting, so in almost every
     # digest period only ONE of DNS Deleted/DNS Trashed will ever be
     # nonzero -- showing both every time means one is "(none)" nearly
@@ -136,45 +176,6 @@ def build_digest_body(
         # mode is in effect even with zero activity.
         label = "DNS Deleted" if spam_domain_perm_delete else "DNS Trashed"
         dns_section(label, [])
-
-    # Rule Deleted -- config.json matches with perm_delete: true (permanent, no Trash recovery)
-    lines.append(f"Rule Deleted: {len(rule_deleted_entries)}")
-    lines.append("-" * 50)
-    if rule_deleted_entries:
-        for e in rule_deleted_entries:
-            lines.append(f"rule={e['matched_rule']} | From: {e['from']} | Subject: {e['subject']}")
-    else:
-        lines.append("(none)")
-    lines.append("")
-
-    # Rule Trashed -- config.json matches with perm_delete: false/default (recoverable in Trash)
-    lines.append(f"Rule Trashed: {len(rule_trashed_entries)}")
-    lines.append("-" * 50)
-    if rule_trashed_entries:
-        for e in rule_trashed_entries:
-            lines.append(f"rule={e['matched_rule']} | From: {e['from']} | Subject: {e['subject']}")
-    else:
-        lines.append("(none)")
-    lines.append("")
-
-    # Remaining -- still sitting in Spam
-    lines.append(f"Remaining: {len(remaining)}")
-    lines.append("-" * 50)
-    if remaining:
-        for r in remaining:
-            lines.append(f"From: {r['from']} | Subject: {r['subject']}")
-    else:
-        lines.append("(none)")
-    lines.append("")
-
-    # Errors -- unchanged
-    lines.append(f"Errors in the last 24 hours: {len(error_lines)}")
-    lines.append("-" * 50)
-    if error_lines:
-        for line in error_lines:
-            lines.append(f"  {line}")
-    else:
-        lines.append("(none)")
 
     return "\n".join(lines).rstrip() + "\n"
 
