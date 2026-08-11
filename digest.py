@@ -5,7 +5,11 @@ Sends a daily digest email with these sections:
   - Rule Trashed: config.json rule matches without perm_delete (moved to
     Trash, same condensed format)
   - Rule Deleted: config.json rule matches with "perm_delete": true
-    (permanently deleted, condensed to one line each: rule/From/Subject)
+    (permanently deleted, condensed to one line each: rule/From/Subject).
+    If the top-level "rule_deleted_summary_only" config setting is true,
+    this section instead shows a per-rule count breakdown with no
+    individual From/Subject detail. This setting does not affect Rule
+    Trashed, which is always itemized.
   - DNS Deleted and/or DNS Trashed: since spam_domain_perm_delete is a
     single global setting, normally only one of these will have any
     activity in a given digest period -- that one section is shown alone.
@@ -84,6 +88,7 @@ def build_digest_body(
     remaining: list[dict],
     error_lines: list[str],
     spam_domain_perm_delete: bool = False,
+    rule_deleted_summary_only: bool = False,
 ) -> str:
     lines = []
     lines.append(f"Gmail Spam Cleaner -- Daily Digest ({local_timestamp()})")
@@ -147,12 +152,23 @@ def build_digest_body(
         lines.append("(none)")
     lines.append("")
 
-    # Rule Deleted -- config.json matches with perm_delete: true (permanent, no Trash recovery)
+    # Rule Deleted -- config.json matches with perm_delete: true (permanent, no Trash recovery).
+    # When rule_deleted_summary_only is set, show a per-rule count breakdown
+    # instead of itemized From/Subject detail (mirrors the DNS sections'
+    # summarized style). Rule Trashed above is unaffected by this setting.
     lines.append(f"Rule Deleted: {len(rule_deleted_entries)}")
     lines.append("-" * 50)
     if rule_deleted_entries:
-        for e in rule_deleted_entries:
-            lines.append(f"rule={e['matched_rule']} | From: {e['from']} | Subject: {e['subject']}")
+        if rule_deleted_summary_only:
+            counts_by_rule: dict[str, int] = {}
+            for e in rule_deleted_entries:
+                rule_name = e["matched_rule"]
+                counts_by_rule[rule_name] = counts_by_rule.get(rule_name, 0) + 1
+            for rule_name, count in counts_by_rule.items():
+                lines.append(f"{rule_name}: {count}")
+        else:
+            for e in rule_deleted_entries:
+                lines.append(f"rule={e['matched_rule']} | From: {e['from']} | Subject: {e['subject']}")
     else:
         lines.append("(none)")
     lines.append("")
@@ -223,7 +239,13 @@ def run():
 
     deleted_entries = read_log_entries()
 
-    body = build_digest_body(deleted_entries, remaining, error_lines, get_spam_domain_perm_delete(config))
+    body = build_digest_body(
+        deleted_entries,
+        remaining,
+        error_lines,
+        get_spam_domain_perm_delete(config),
+        config.get("rule_deleted_summary_only", False),
+    )
     send_digest(creds["email"], recipient, body)
 
     clear_log()

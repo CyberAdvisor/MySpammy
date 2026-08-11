@@ -94,6 +94,11 @@ unanchored (drop `$`) unless you're deliberately matching the trailing angle bra
 
 Also set `digest_recipient` to your real email address (it starts as the placeholder `you@example.com`, which the digest script refuses to run against).
 
+**Top-level settings (outside `rules`):**
+
+- `digest_recipient`: your real email address, as above.
+- `rule_deleted_summary_only` (optional, defaults to `false`): if `true`, the digest's **Rule Deleted** section shows a per-rule count breakdown (e.g. `Top Stories: 2`) instead of itemized `From`/`Subject` detail for each match. Only affects **Rule Deleted** -- **Rule Trashed** is always itemized regardless of this setting.
+
 ## 6. Automatic "Spam Domain" check (always runs; deletion type is configurable)
 
 Before any `config.json` rule is checked, `sweep.py` looks up the sender's
@@ -352,7 +357,7 @@ rather than the whole day's accumulated sweep history.
 
 - **Config.json rule matches go to Trash by default** (30-day recovery window) -- a rule that's too broad is recoverable, not catastrophic. A rule can opt into **permanent deletion** instead by setting `"perm_delete": true` (see section 5); do this only for rules you're confident can't produce a false positive.
 - **The hardcoded Spam Domain check always runs**, but whether it permanently deletes or moves to Trash is controlled by `spam_domain_perm_delete` in `config.json` (defaults to `false`/Trash). Permanent deletion has no recovery window; Trash gives 30 days.
-- `log.jsonl` records `"deletion_type": "trash"` or `"permanent"` for every deletion. The digest email lists sections in this order: **Errors**, **Remaining**, **Rule Trashed**, **Rule Deleted**, then a **DNS Deleted** or **DNS Trashed** section for the hardcoded check depending on the active `spam_domain_perm_delete` setting (both only appear together if you changed that setting mid-period).
+- `log.jsonl` records `"deletion_type": "trash"` or `"permanent"` for every deletion. The digest email lists sections in this order: **Errors**, **Remaining**, **Rule Trashed**, **Rule Deleted**, then a **DNS Deleted** or **DNS Trashed** section for the hardcoded check depending on the active `spam_domain_perm_delete` setting (both only appear together if you changed that setting mid-period). **Rule Deleted** is itemized by default, or shown as a per-rule count breakdown if `rule_deleted_summary_only` is `true` (see section 5); **Rule Trashed** is always itemized.
 - A rule with invalid `field` or unparseable regex is skipped and logged to `errors.log`, not silently ignored or crash-inducing.
 - The hardcoded Spam Domain check (see section 6) only ever deletes on an explicit "this domain doesn't resolve" result -- a failed or inconclusive check never triggers a deletion by itself.
 - `credentials.json` grants mail access to your account -- keep it out of version control (see `.gitignore`) and revoke the app password from your Google account if it's ever exposed.
