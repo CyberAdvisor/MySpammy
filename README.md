@@ -30,11 +30,11 @@ everything runs on Python's standard library.
 ## 1. Turn on 2-Step Verification
 
 App Passwords require 2-Step Verification to be enabled on your Google
-account. Turn it on at: https://myaccount.google.com/security
+account. Turn it on through your Google Account security settings.
 
 ## 2. Generate an App Password
 
-1. Go to https://myaccount.google.com/apppasswords
+1. Open your Google Account's App Passwords page.
 2. Create a new app password (name it something like "spam-cleaner").
 3. Google shows you a 16-character password once -- copy it.
 
@@ -162,8 +162,8 @@ purely for email while having no DNS A record at all (e.g. a company that
 sends mail from a domain but hosts no website on it). Such a domain would
 show as "doesn't resolve" here even though it's completely real. This
 tradeoff was accepted after the empirical comparison above showed no
-disagreements in practice, but it's worth knowing about if you ever see an
-unexpected deletion -- and is exactly why `spam_domain_perm_delete`
+disagreements in practice, but it's worth knowing about if you ever see
+an unexpected deletion -- and is exactly why `spam_domain_perm_delete`
 defaults to `false` (Trash, recoverable) rather than `true`.
 
 **Safety property:** if the DNS check is inconclusive for any reason, the
@@ -230,101 +230,181 @@ Tips for writing your own:
 
 ## 8. Test manually before automating
 
+From the **development copy**:
+
 ```bash
+cd ~/Documents/Projects/MySpammy
 python3 sweep.py   # scans spam, trashes matches, prints a summary
 python3 digest.py  # sends the digest email immediately
 ```
 
 Check `errors.log` if anything looks off.
 
-## 9. Where to put this project (read before scheduling anything)
+Once testing is complete, deploy the updated project to the runtime location as described in section 9.
 
-**Put this project folder somewhere OUTSIDE `~/Documents`, `~/Desktop`, and
-`~/Downloads`** -- for example directly in your home folder:
+## 9. Project location and development workflow
 
+The project uses two copies of the folder on the Mac:
+
+- **Development copy:** `~/Documents/Projects/MySpammy`
+- **Runtime copy:** `~/MySpammy`
+
+The development copy is the **source of truth**. It is the copy that should be connected to GitHub, edited, tested, committed, and pushed.
+
+The runtime copy is the **deployed copy** used by Lingon for scheduled execution. It should not normally be edited directly.
+
+### Clone the project
+
+Clone the GitHub repository into the Projects directory:
+
+```bash
+cd ~/Documents/Projects
+git clone https://github.com/CyberAdvisor/MySpammy.git
 ```
-mv ~/Documents/Records/Programming/MySpammy ~/MySpammy
+
+This creates:
+
+```text
+~/Documents/Projects/MySpammy
 ```
 
-(adjust the path to wherever yours currently lives)
+Make all code, configuration, and documentation changes in this directory.
 
-Those three folders are protected by macOS's TCC (privacy) system. Running
-a script interactively in Terminal usually works fine there, because
-Terminal itself has been granted access -- but a **background** process
-(a scheduled `launchd` job, `cron`, etc.) often does NOT inherit that
-access, and gets silently blocked with an `Operation not permitted` /
-exit code `126` error, even though the exact same script runs perfectly
-when you type the command yourself. This bit us specifically with `/bin/sh`
-failing to even open the script file when run on a schedule. Moving the
-project outside those folders avoids this category of problem entirely,
-rather than having to grant Full Disk Access to every individual binary
-(`sh`, `python3`, etc.) one at a time, which is fragile and easy to miss one of.
+### Create or update the runtime copy
 
-## 10. Schedule with Lingon (recommended -- supports true hourly scheduling)
+After cloning, or whenever you have made changes that you want the scheduled jobs to use, copy the complete project folder to your home directory:
 
-**Lingon** (Lingon X / Lingon Pro / just "Lingon" depending on the version
-you have -- the app has been renamed a few times) is a GUI front-end for
-macOS's `launchd`, the scheduler Apple actually recommends over `cron`.
-Unlike the Shortcuts approach below, Lingon supports genuine periodic
-scheduling ("every N hours"), not just once-a-day.
+```bash
+rm -rf ~/MySpammy
+cp -R ~/Documents/Projects/MySpammy ~/MySpammy
+```
+
+The result is:
+
+```text
+~/Documents/Projects/MySpammy    # development / GitHub source
+~/MySpammy                        # runtime / Lingon
+```
+
+The runtime copy is not the copy that should be edited or used for Git operations. Treat it as a deployed copy of the development project.
+
+The normal workflow is:
+
+1. Make changes in `~/Documents/Projects/MySpammy`.
+2. Test the changes there.
+3. Commit and push the changes to GitHub.
+4. Copy the updated project to `~/MySpammy`.
+5. Lingon continues running the project from `~/MySpammy`.
+
+Do not make code changes directly in `~/MySpammy`. Any changes made there will be overwritten the next time the runtime copy is replaced.
+
+### Why the runtime copy is outside Documents
+
+macOS's privacy system (TCC) can restrict background processes from accessing protected folders such as `~/Documents`, `~/Desktop`, and `~/Downloads`. A script that works when run interactively in Terminal may fail when launched in the background by `launchd`.
+
+Keeping the runtime copy at:
+
+```text
+~/MySpammy
+```
+
+avoids this category of problem and means that Lingon does not need special privacy access to the project directory.
+
+The development copy can remain in `~/Documents/Projects/MySpammy` because it is used interactively for development rather than by the background scheduler.
+
+## 10. Schedule with Lingon
+
+**Lingon** is a GUI front-end for macOS's `launchd`, the scheduler Apple uses for background jobs. Lingon supports periodic scheduling, including running a job every 10 minutes.
+
+Lingon should run the **runtime copy** at `~/MySpammy`, not the development copy in `~/Documents/Projects/MySpammy`.
 
 ### Set up the sweep job
 
-1. Install **Lingon** from the Mac App Store or [peterborgapps.com](https://www.peterborgapps.com/lingon/) if you don't have it.
+1. Install Lingon if you don't already have it.
 2. Click **+** to create a new job, scoped to **"Me"** (a per-user agent, not root/all-users).
-3. Name it (e.g. **Spam Sweep**).
-4. Under **Run**, choose the script/document action and create a small wrapper script -- don't point Lingon directly at `sweep.py`. Instead, create a `.sh` file in your project folder:
-   ```
-   cd ~/MySpammy
-   cat > "Spam Sweep.sh" << 'EOF'
+3. Name it **Spam Sweep**.
+4. Point Lingon at the `Spam Sweep.sh` wrapper in `~/MySpammy`.
+5. The wrapper should use the runtime directory:
+
+   ```bash
    #!/bin/sh
 
    cd /Users/YOURNAME/MySpammy
    /Library/Developer/CommandLineTools/usr/bin/python3 sweep.py >> run.log 2>&1
-   EOF
-   chmod +x "Spam Sweep.sh"
    ```
-   (replace `YOURNAME` with your actual username, and confirm your `python3` path with `which python3` if you're not sure it's the same)
-5. Point Lingon's Run action at this `Spam Sweep.sh` file.
-6. Under **When**, set **Schedule -> Every hour**, minute `0` (or whatever offset you like).
-7. Save.
+
+   Replace `YOURNAME` with your macOS username, and confirm the Python path with `which python3` if necessary.
+6. Make sure the wrapper is executable:
+
+   ```bash
+   chmod +x ~/MySpammy/"Spam Sweep.sh"
+   ```
+7. Under **When**, set the schedule to **Every 10 minutes**.
+8. Save the job.
+
+The sweep therefore runs approximately every 10 minutes while the Lingon job is active.
 
 ### Set up the digest job
 
-Repeat the same steps for a second job named **Spam Digest**, with a
-wrapper script that calls `digest.py` instead, scheduled **once daily**
-(not hourly) at a fixed time -- e.g. 30 minutes after the sweep job, so
-the digest reflects a day's worth of cleanup rather than running before
-sweep has processed anything that hour.
+Create a second Lingon job named **Spam Digest** that runs the `Spam Digest.sh` wrapper in `~/MySpammy`.
 
-### Testing it
+The digest should run **once daily** at a fixed time, preferably after a sweep, so the digest reflects the day's cleanup.
 
-Lingon's manual-run control has moved around across versions/renames --
-if you don't see an obvious "Run"/"Start" button, right-click the job in
-the list, or check the toolbar for a play icon. The universally reliable
-way to force a run, regardless of Lingon's exact UI, is via Terminal:
+The wrapper should use the runtime directory:
 
+```bash
+#!/bin/sh
+
+cd /Users/YOURNAME/MySpammy
+/Library/Developer/CommandLineTools/usr/bin/python3 digest.py >> run.log 2>&1
 ```
+
+### Updating the scheduled version
+
+When you make changes to the project:
+
+1. Work in `~/Documents/Projects/MySpammy`.
+2. Test the changes.
+3. Commit and push the changes to GitHub.
+4. Replace the runtime copy with the updated development copy:
+
+   ```bash
+   rm -rf ~/MySpammy
+   cp -R ~/Documents/Projects/MySpammy ~/MySpammy
+   ```
+5. The existing Lingon jobs will continue to point at `~/MySpammy`, so no scheduler changes are normally necessary.
+
+Because the entire folder is copied, the runtime copy receives the current code, configuration, wrapper scripts, and other project files from the development copy.
+
+### Testing the scheduled jobs
+
+Lingon's manual-run control has moved around across versions/renames. If you don't see an obvious "Run"/"Start" button, right-click the job in the list or check the toolbar for a play icon.
+
+The reliable way to force a run from Terminal is:
+
+```bash
 launchctl kickstart gui/$(id -u)/"Spam Sweep"
 launchctl list | grep -i spam
-cat run.log
+cat ~/MySpammy/run.log
 ```
 
-The middle command's second column is the last exit code -- `0` means
-success; `126` almost always means either a missing execute permission
-(`chmod +x` the script) or the TCC/folder-location issue described in
-section 9 above.
+The middle command's second column is the last exit code. `0` means success. `126` generally indicates an execution-permission problem or a problem accessing the script.
+
+The scheduler operates entirely from `~/MySpammy`; the Git repository and development workflow remain in `~/Documents/Projects/MySpammy`.
 
 ## 11. Alternative: Schedule with Shortcuts (once-daily only, no third-party app)
 
 If once-a-day is good enough for your needs and you'd rather not install
 anything beyond what macOS ships with, Shortcuts works too -- it just
-can't do true hourly scheduling (Time of Day automations only support
+can't do true 10-minute scheduling (Time of Day automations only support
 Daily/Weekly/Monthly repeat).
+
+Shortcuts should also run the **runtime copy** at `~/MySpammy`, not the
+development copy in `~/Documents/Projects/MySpammy`.
 
 ### One-time setup
 
-1. Open **Shortcuts** (Spotlight search, or Applications folder).
+1. Open **Shortcuts**.
 2. Menu bar: **Shortcuts** -> **Settings** -> **Advanced** -> turn on
    **Allow Running Scripts**.
 
@@ -332,10 +412,12 @@ Daily/Weekly/Monthly repeat).
 
 1. Click **+** for a new shortcut.
 2. Search the action library for **Run Shell Script**, drag it into the workflow.
-3. Paste into the script box (adjust the path/python3 location if yours differs):
-   ```
+3. Paste into the script box:
+
+   ```bash
    cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 sweep.py >> run.log 2>&1
    ```
+
 4. Leave **Shell** set to `/bin/zsh`.
 5. Rename the shortcut (top-left) to **Spam Sweep**.
 6. Close the editor.
@@ -343,7 +425,8 @@ Daily/Weekly/Monthly repeat).
 ### Create the digest shortcut
 
 Repeat the same steps, naming it **Spam Digest**, using:
-```
+
+```bash
 cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 digest.py >> run.log 2>&1
 ```
 
@@ -356,9 +439,12 @@ cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 digest.py >
 5. Turn **off** "Ask Before Running" so it runs silently.
 6. Repeat for **Spam Digest**, at a later time on the same day, also Daily.
 
+Shortcuts cannot reproduce the normal Lingon configuration of running the
+sweep every 10 minutes.
+
 **Verifying it actually ran:** these automations run silently in the
-background with no visible confirmation. Check `run.log` in your project
-folder after a scheduled time passes to confirm the script executed.
+background with no visible confirmation. Check `~/MySpammy/run.log` after
+a scheduled time passes to confirm the script executed.
 
 **`run.log` resets itself once a day.** Every `sweep.py` run appends a
 line, but `digest.py` clears the file at the start of each of its runs
@@ -374,8 +460,10 @@ rather than the whole day's accumulated sweep history.
 | `VERSION` | Single project-wide version number (e.g. `1.0.1`), bumped on any release regardless of which files changed. Matches the git tag for that release (e.g. `v1.0.1`) and the version cited in each changed file's own `Change log:` docstring entry. |
 | `domain_check.py` | DNS-based domain existence check for sender domains -- used by `sweep.py` for the hardcoded Spam Domain check, and by `debug_spam.py` |
 | `debug_spam.py` | Diagnostic tool: shows what's extracted from each spam message, whether rules match, and the Spam Domain check's verdict -- does NOT delete anything |
-| `sweep.py` | Deletes matching spam, runs once daily. Runs the hardcoded Spam Domain check first, then config.json rules |
-| `digest.py` | Sends the daily summary email, runs once a day |
+| `sweep.py` | Scans Spam and processes matching messages each time it is run. Under the recommended Lingon configuration, it runs every 10 minutes. It runs the hardcoded Spam Domain check first, then `config.json` rules. |
+| `digest.py` | Sends the daily summary email, normally run once a day |
+| `Spam Sweep.sh` | Shell wrapper used by Lingon to run `sweep.py` from the runtime copy at `~/MySpammy` |
+| `Spam Digest.sh` | Shell wrapper used by Lingon to run `digest.py` from the runtime copy at `~/MySpammy` |
 | `config.json` | Your editable rules and digest recipient (does not affect the hardcoded Spam Domain check) |
 | `credentials.json` | Your Gmail address + app password (create from `credentials.json.example`, do not share or commit) |
 | `log.jsonl` | Deletion log since the last digest (auto-managed) |
