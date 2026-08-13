@@ -1,0 +1,37 @@
+{
+  "digest_recipient": "you@example.com",
+  "rule_deleted_summary_only": true,
+  "rules": [
+    {
+      "name": "SAMPLE_subject_example",
+      "enabled": false,
+      "field": "subject",
+      "pattern": "free.*prize|you.?ve won"
+    },
+    {
+      "name": "SAMPLE_sender_domain_example",
+      "enabled": false,
+      "field": "from",
+      "pattern": "@shady-domain\\.(com|net)"
+    },
+    {
+      "name": "SAMPLE_to_example",
+      "enabled": false,
+      "field": "to",
+      "pattern": "old-alias@yourdomain\\.com"
+    },
+    {
+      "name": "SAMPLE_body_example",
+      "enabled": false,
+      "field": "body",
+      "pattern": "click here immediately to verify"
+    },
+    {
+      "name": "SAMPLE_perm_delete_example",
+      "enabled": false,
+      "field": "body",
+      "perm_delete": true,
+      "pattern": "example phrase to match and permanently delete"
+    }
+  ]
+}

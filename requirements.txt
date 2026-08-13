@@ -1,0 +1,2 @@
+# No external dependencies. sweep.py, digest.py, and common.py use only
+# Python's standard library (imaplib, smtplib, email, json, re).
