@@ -1,0 +1,117 @@
+{
+  "digest_recipient": "mslinbox@icloud.com",
+  "rule_deleted_summary_only": true,
+  "rules": [
+    {
+      "name": "SAMPLE_subject_example",
+      "enabled": false,
+      "field": "subject",
+      "pattern": "free.*prize|you.?ve won"
+    },
+    {
+      "name": "SAMPLE_sender_domain_example",
+      "enabled": false,
+      "field": "from",
+      "pattern": "@shady-domain\\.(com|net)"
+    },
+    {
+      "name": "SAMPLE_body_example",
+      "enabled": false,
+      "field": "body",
+      "pattern": "click here immediately to verify"
+    },
+    {
+      "name": "SAMPLE_to_example",
+      "enabled": false,
+      "field": "to",
+      "pattern": "old-alias@yourdomain\\.com"
+    },
+    {
+      "name": "Top Stories",
+      "enabled": true,
+      "field": "body",
+      "perm_delete": true,
+      "pattern": "Top Stories of the Day",
+      "last_hit": "2026-08-12"
+    },
+    {
+      "name": "Lowes Winner",
+      "enabled": true,
+      "field": "body",
+      "perm_delete": true,
+      "pattern": "YOU ARE OUR WINNER"
+    },
+    {
+      "name": "Auto Quote Guide",
+      "enabled": true,
+      "field": "body",
+      "perm_delete": true,
+      "pattern": "auto quote guide",
+      "last_hit": "2026-08-07"
+    },
+    {
+      "name": "Google Careers",
+      "enabled": true,
+      "field": "body",
+      "perm_delete": true,
+      "pattern": "careers\\.google\\.com"
+    },
+    {
+      "name": "Gmail Spam",
+      "enabled": true,
+      "field": "from",
+      "pattern": "gmail\\.com",
+      "last_hit": "2026-08-11"
+    },
+    {
+      "name": "Cloud Spam",
+      "enabled": true,
+      "field": "body",
+      "perm_delete": true,
+      "pattern": "cloud support team"
+    },
+    {
+      "name": "Job Spam",
+      "enabled": true,
+      "field": "body",
+      "pattern": "Job Overview:"
+    },
+    {
+      "name": "Politcal Spam",
+      "enabled": true,
+      "field": "from",
+      "perm_delete": true,
+      "pattern": "patriot|right|american|nrcc",
+      "last_hit": "2026-08-10"
+    },
+    {
+      "name": "Politcal Spam 2",
+      "enabled": true,
+      "field": "body",
+      "perm_delete": false,
+      "pattern": "links.iterable.com"
+    },
+    {
+      "name": "Spam Domains",
+      "enabled": true,
+      "field": "from",
+      "perm_delete": true,
+      "pattern": "ethtradebot|medtroniic",
+      "last_hit": "2026-08-08"
+    },
+    {
+      "name": "Redirect Spam",
+      "enabled": true,
+      "field": "body",
+      "perm_delete": true,
+      "pattern": "storage.googleapis.com",
+      "last_hit": "2026-08-12"
+    },
+    {
+      "name": "HS Purchase Scam",
+      "enabled": true,
+      "field": "subject",
+      "pattern": "\\b(Investment|Purchase|Acquire)\\b.*Heuristic Security"
+    }
+  ]
+}

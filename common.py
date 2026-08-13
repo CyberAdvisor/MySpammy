@@ -32,7 +32,7 @@ SMTP_PORT = 465
 
 SPAM_FOLDER = '"[Gmail]/Spam"'
 
-VALID_FIELDS = {"subject", "from", "body"}
+VALID_FIELDS = {"subject", "from", "to", "body"}
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
@@ -447,6 +447,12 @@ def extract_fields(msg: Message) -> dict:
         from_ = str(msg.get("From", "") or "")
 
     try:
+        to_ = _decode_header_value(msg.get("To", ""))
+    except Exception as e:
+        logger.warning("Failed to decode To header, using raw value: %s", e)
+        to_ = str(msg.get("To", "") or "")
+
+    try:
         body = _extract_body_text(msg)
     except Exception as e:
         logger.warning("Failed to extract message body, using empty body: %s", e)
@@ -455,6 +461,7 @@ def extract_fields(msg: Message) -> dict:
     return {
         "subject": subject,
         "from": from_,
+        "to": to_,
         "body": body,
     }
 
