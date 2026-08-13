@@ -7,6 +7,13 @@ Google Cloud Console setup required.
 
 Used by sweep.py (deletes matching spam) and digest.py (sends the daily
 summary).
+
+Change log:
+  - v1.0.1 (2026-08-13): Removed unused rules_need_body() -- it was never
+    called anywhere in the codebase (sweep.py always decodes the full
+    body via extract_fields() regardless of whether any rule needs it,
+    so the early-skip optimization the function was meant to enable was
+    never actually wired up).
 """
 import html
 import imaplib
@@ -203,12 +210,6 @@ def get_rule_perm_delete(rules: list[CompiledRule], rule_name: str) -> bool:
         if rule.name == rule_name:
             return rule.perm_delete
     return False
-
-
-def rules_need_body(rules: list[CompiledRule]) -> bool:
-    """Whether any enabled rule inspects the message body -- if not, sweep.py
-    can skip decoding the full body for speed."""
-    return any(r.field == "body" for r in rules)
 
 
 # ---------------------------------------------------------------------------

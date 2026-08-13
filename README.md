@@ -108,6 +108,23 @@ be a real domain to begin with -- the message is immediately logged with
 the rule name `Spam Domain` and deleted. `config.json` rules are skipped
 entirely for that message.
 
+The check doesn't look up the sender's full domain as written -- it first
+reduces it to the last two dot-separated labels (e.g. `mail.spam.xyz`
+becomes `spam.xyz`) and checks that instead, on the assumption this is the
+registrable domain. **Known limitation:** this reduction doesn't account
+for multi-part TLDs like `.co.uk` -- for a domain such as
+`example.co.uk`, it would incorrectly take `co.uk` as the "registrable"
+part rather than `example.co.uk`, which can produce an incorrect DNS
+check for such domains. This is a deliberate simplification (implementing
+the full public suffix list was judged unnecessary complexity for a
+diagnostic check) and is worth knowing about if you see an unexpected
+result for a domain with a compound TLD.
+
+Domain check results are cached for the duration of a single `sweep.py`
+run (many spam messages in one run often share a sender domain), so a
+domain's status is only looked up once per run even if it appears in
+multiple messages.
+
 **This check itself cannot be turned off** -- it always runs before any
 config.json rule. But whether it permanently deletes or moves to Trash is
 controlled by the top-level `spam_domain_perm_delete` setting in
@@ -157,6 +174,18 @@ run. A check failure never causes a deletion by itself.
 You can see what this check decides for messages currently in Spam by
 running `debug_spam.py`, which prints the Spam Domain check's verdict for
 every message alongside everything else it shows.
+
+`debug_spam.py` takes an optional message index:
+
+```bash
+python3 debug_spam.py       # check all rules against all spam
+python3 debug_spam.py 42    # inspect only message index 42, in full
+```
+
+Passing an index limits output to that one message and adds a MIME
+structure breakdown (content-type of every part, byte size, and
+disposition) -- useful for seeing exactly how a message is put together
+when a body-based rule "isn't catching" something.
 
 ## 7. Common regex rule examples
 
@@ -342,6 +371,7 @@ rather than the whole day's accumulated sweep history.
 | File | Purpose |
 |---|---|
 | `common.py` | Shared logic: config loading, rule matching, IMAP/SMTP connections, message parsing |
+| `VERSION` | Single project-wide version number (e.g. `1.0.1`), bumped on any release regardless of which files changed. Matches the git tag for that release (e.g. `v1.0.1`) and the version cited in each changed file's own `Change log:` docstring entry. |
 | `domain_check.py` | DNS-based domain existence check for sender domains -- used by `sweep.py` for the hardcoded Spam Domain check, and by `debug_spam.py` |
 | `debug_spam.py` | Diagnostic tool: shows what's extracted from each spam message, whether rules match, and the Spam Domain check's verdict -- does NOT delete anything |
 | `sweep.py` | Deletes matching spam, runs once daily. Runs the hardcoded Spam Domain check first, then config.json rules |
