@@ -230,7 +230,7 @@ Tips for writing your own:
 
 ## 8. Test manually before automating
 
-From the **development copy**:
+From the project folder:
 
 ```bash
 cd ~/Documents/Projects/MySpammy
@@ -240,18 +240,19 @@ python3 digest.py  # sends the digest email immediately
 
 Check `errors.log` if anything looks off.
 
-Once testing is complete, deploy the updated project to the runtime location as described in section 9.
+Once testing is complete, commit and push your changes, then set up (or confirm) the Shortcuts automations described in section 9.
 
 ## 9. Project location and development workflow
 
-The project uses two copies of the folder on the Mac:
+The project lives in a single folder on the Mac:
 
-- **Development copy:** `~/Documents/Projects/MySpammy`
-- **Runtime copy:** `~/MySpammy`
+```text
+~/Documents/Projects/MySpammy
+```
 
-The development copy is the **source of truth**. It is the copy that should be connected to GitHub, edited, tested, committed, and pushed.
-
-The runtime copy is the **deployed copy** used by Shortcuts for scheduled execution. It should not normally be edited directly.
+This folder is connected to GitHub and is where you edit, test, commit,
+push, and run the scheduled Shortcuts automations from -- there's no
+separate copy.
 
 ### Clone the project
 
@@ -270,47 +271,13 @@ This creates:
 
 Make all code, configuration, and documentation changes in this directory.
 
-### Create or update the runtime copy
-
-After cloning, or whenever you have made changes that you want the scheduled jobs to use, copy the complete project folder to your home directory:
-
-```bash
-rm -rf ~/MySpammy
-cp -R ~/Documents/Projects/MySpammy ~/MySpammy
-```
-
-The result is:
-
-```text
-~/Documents/Projects/MySpammy    # development / GitHub source
-~/MySpammy                        # runtime / Shortcuts
-```
-
-The runtime copy is not the copy that should be edited or used for Git operations. Treat it as a deployed copy of the development project.
-
 The normal workflow is:
 
 1. Make changes in `~/Documents/Projects/MySpammy`.
-2. Test the changes there.
+2. Test the changes there (see section 8).
 3. Commit and push the changes to GitHub.
-4. Copy the updated project to `~/MySpammy`.
-5. Shortcuts continues running the project from `~/MySpammy`.
 
-Do not make code changes directly in `~/MySpammy`. Any changes made there will be overwritten the next time the runtime copy is replaced.
-
-### Why the runtime copy is outside Documents
-
-macOS's privacy system (TCC) can restrict background processes from accessing protected folders such as `~/Documents`, `~/Desktop`, and `~/Downloads`. A script that works when run interactively in Terminal may fail when launched in the background by `launchd`.
-
-Keeping the runtime copy at:
-
-```text
-~/MySpammy
-```
-
-avoids this category of problem and means that Shortcuts does not need special privacy access to the project directory.
-
-The development copy can remain in `~/Documents/Projects/MySpammy` because it is used interactively for development rather than by the background scheduler.
+The next scheduled Shortcuts run automatically picks up the changes, since it runs from this same folder.
 
 ## 10. Schedule with Shortcuts
 
@@ -319,8 +286,8 @@ macOS's built-in Shortcuts app -- no third-party scheduler required.
 (Shortcuts' Time of Day automations only support Daily/Weekly/Monthly
 repeat, so sub-daily scheduling isn't an option here.)
 
-Shortcuts should run the **runtime copy** at `~/MySpammy`, not the
-development copy in `~/Documents/Projects/MySpammy`.
+Shortcuts should run the project from `~/Documents/Projects/MySpammy` -- the
+same folder used for development and Git.
 
 ### One-time setup
 
@@ -335,7 +302,7 @@ development copy in `~/Documents/Projects/MySpammy`.
 3. Paste into the script box:
 
    ```bash
-   cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 sweep.py >> run.log 2>&1
+   cd ~/Documents/Projects/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 sweep.py >> run.log 2>&1
    ```
 
 4. Leave **Shell** set to `/bin/zsh`.
@@ -347,7 +314,7 @@ development copy in `~/Documents/Projects/MySpammy`.
 Repeat the same steps, naming it **Spam Digest**, using:
 
 ```bash
-cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 digest.py >> run.log 2>&1
+cd ~/Documents/Projects/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 digest.py >> run.log 2>&1
 ```
 
 ### Schedule them
@@ -360,8 +327,9 @@ cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 digest.py >
 6. Repeat for **Spam Digest**, at a later time on the same day, also Daily.
 
 **Verifying it actually ran:** these automations run silently in the
-background with no visible confirmation. Check `~/MySpammy/run.log` after
-a scheduled time passes to confirm the script executed.
+background with no visible confirmation. Check
+`~/Documents/Projects/MySpammy/run.log` after a scheduled time passes to
+confirm the script executed.
 
 **`run.log` resets itself once a day.** Every `sweep.py` run appends a
 line, but `digest.py` clears the file at the start of each of its runs
@@ -379,8 +347,8 @@ rather than the whole day's accumulated sweep history.
 | `debug_spam.py` | Diagnostic tool: shows what's extracted from each spam message, whether rules match, and the Spam Domain check's verdict -- does NOT delete anything |
 | `sweep.py` | Scans Spam and processes matching messages each time it is run. Under the recommended Shortcuts configuration, it runs once daily. It runs the hardcoded Spam Domain check first, then `config.json` rules. |
 | `digest.py` | Sends the daily summary email, normally run once a day |
-| `Spam Sweep.sh` | Shell wrapper used by Shortcuts to run `sweep.py` from the runtime copy at `~/MySpammy` |
-| `Spam Digest.sh` | Shell wrapper used by Shortcuts to run `digest.py` from the runtime copy at `~/MySpammy` |
+| `Spam Sweep.sh` | Shell wrapper used by Shortcuts to run `sweep.py` from `~/Documents/Projects/MySpammy` |
+| `Spam Digest.sh` | Shell wrapper used by Shortcuts to run `digest.py` from `~/Documents/Projects/MySpammy` |
 | `config.json` | Your editable rules and digest recipient (does not affect the hardcoded Spam Domain check) |
 | `credentials.json` | Your Gmail address + app password (create from `credentials.json.example`, do not share or commit) |
 | `log.jsonl` | Deletion log since the last digest (auto-managed) |
