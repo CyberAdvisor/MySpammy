@@ -27,8 +27,15 @@ There are no external Python dependencies and no automated test suite.
   behavior, config, scheduler, or safety change. Verify safety claims against
   the current implementation—some older prose/docstrings may describe an
   earlier deletion policy.
-- `VERSION` and git tags use `vX.Y.Z`. Only bump `VERSION` and add matching
-  changed-file changelog entries when making an explicit release.
+- `VERSION` and git tags use `vX.Y.Z`, and the git tag must match the GitHub
+  release version. Every code change is a versioned release: increment
+  `VERSION`, create the matching `vX.Y.Z` tag when publishing, and add a
+  `Change log:` entry using that version to every changed source file. Include
+  the date and a concise description of the behavior change in each entry.
+- Before pushing code to GitHub, document the change in the GitHub-facing
+  change notes (commit message and, when applicable, pull request/release
+  description). The notes must identify the version and summarize the user-
+  visible behavior, safety impact, and verification performed.
 
 ## Safety-critical behavior
 
