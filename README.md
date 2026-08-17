@@ -251,7 +251,7 @@ The project uses two copies of the folder on the Mac:
 
 The development copy is the **source of truth**. It is the copy that should be connected to GitHub, edited, tested, committed, and pushed.
 
-The runtime copy is the **deployed copy** used by Lingon for scheduled execution. It should not normally be edited directly.
+The runtime copy is the **deployed copy** used by Shortcuts for scheduled execution. It should not normally be edited directly.
 
 ### Clone the project
 
@@ -283,7 +283,7 @@ The result is:
 
 ```text
 ~/Documents/Projects/MySpammy    # development / GitHub source
-~/MySpammy                        # runtime / Lingon
+~/MySpammy                        # runtime / Shortcuts
 ```
 
 The runtime copy is not the copy that should be edited or used for Git operations. Treat it as a deployed copy of the development project.
@@ -294,7 +294,7 @@ The normal workflow is:
 2. Test the changes there.
 3. Commit and push the changes to GitHub.
 4. Copy the updated project to `~/MySpammy`.
-5. Lingon continues running the project from `~/MySpammy`.
+5. Shortcuts continues running the project from `~/MySpammy`.
 
 Do not make code changes directly in `~/MySpammy`. Any changes made there will be overwritten the next time the runtime copy is replaced.
 
@@ -308,98 +308,18 @@ Keeping the runtime copy at:
 ~/MySpammy
 ```
 
-avoids this category of problem and means that Lingon does not need special privacy access to the project directory.
+avoids this category of problem and means that Shortcuts does not need special privacy access to the project directory.
 
 The development copy can remain in `~/Documents/Projects/MySpammy` because it is used interactively for development rather than by the background scheduler.
 
-## 10. Schedule with Lingon
+## 10. Schedule with Shortcuts
 
-**Lingon** is a GUI front-end for macOS's `launchd`, the scheduler Apple uses for background jobs. Lingon supports periodic scheduling, including running a job every 10 minutes.
+Both the sweep and the digest run as **once-daily** automations using
+macOS's built-in Shortcuts app -- no third-party scheduler required.
+(Shortcuts' Time of Day automations only support Daily/Weekly/Monthly
+repeat, so sub-daily scheduling isn't an option here.)
 
-Lingon should run the **runtime copy** at `~/MySpammy`, not the development copy in `~/Documents/Projects/MySpammy`.
-
-### Set up the sweep job
-
-1. Install Lingon if you don't already have it.
-2. Click **+** to create a new job, scoped to **"Me"** (a per-user agent, not root/all-users).
-3. Name it **Spam Sweep**.
-4. Point Lingon at the `Spam Sweep.sh` wrapper in `~/MySpammy`.
-5. The wrapper should use the runtime directory:
-
-   ```bash
-   #!/bin/sh
-
-   cd /Users/YOURNAME/MySpammy
-   /Library/Developer/CommandLineTools/usr/bin/python3 sweep.py >> run.log 2>&1
-   ```
-
-   Replace `YOURNAME` with your macOS username, and confirm the Python path with `which python3` if necessary.
-6. Make sure the wrapper is executable:
-
-   ```bash
-   chmod +x ~/MySpammy/"Spam Sweep.sh"
-   ```
-7. Under **When**, set the schedule to **Every 10 minutes**.
-8. Save the job.
-
-The sweep therefore runs approximately every 10 minutes while the Lingon job is active.
-
-### Set up the digest job
-
-Create a second Lingon job named **Spam Digest** that runs the `Spam Digest.sh` wrapper in `~/MySpammy`.
-
-The digest should run **once daily** at a fixed time, preferably after a sweep, so the digest reflects the day's cleanup.
-
-The wrapper should use the runtime directory:
-
-```bash
-#!/bin/sh
-
-cd /Users/YOURNAME/MySpammy
-/Library/Developer/CommandLineTools/usr/bin/python3 digest.py >> run.log 2>&1
-```
-
-### Updating the scheduled version
-
-When you make changes to the project:
-
-1. Work in `~/Documents/Projects/MySpammy`.
-2. Test the changes.
-3. Commit and push the changes to GitHub.
-4. Replace the runtime copy with the updated development copy:
-
-   ```bash
-   rm -rf ~/MySpammy
-   cp -R ~/Documents/Projects/MySpammy ~/MySpammy
-   ```
-5. The existing Lingon jobs will continue to point at `~/MySpammy`, so no scheduler changes are normally necessary.
-
-Because the entire folder is copied, the runtime copy receives the current code, configuration, wrapper scripts, and other project files from the development copy.
-
-### Testing the scheduled jobs
-
-Lingon's manual-run control has moved around across versions/renames. If you don't see an obvious "Run"/"Start" button, right-click the job in the list or check the toolbar for a play icon.
-
-The reliable way to force a run from Terminal is:
-
-```bash
-launchctl kickstart gui/$(id -u)/"Spam Sweep"
-launchctl list | grep -i spam
-cat ~/MySpammy/run.log
-```
-
-The middle command's second column is the last exit code. `0` means success. `126` generally indicates an execution-permission problem or a problem accessing the script.
-
-The scheduler operates entirely from `~/MySpammy`; the Git repository and development workflow remain in `~/Documents/Projects/MySpammy`.
-
-## 11. Alternative: Schedule with Shortcuts (once-daily only, no third-party app)
-
-If once-a-day is good enough for your needs and you'd rather not install
-anything beyond what macOS ships with, Shortcuts works too -- it just
-can't do true 10-minute scheduling (Time of Day automations only support
-Daily/Weekly/Monthly repeat).
-
-Shortcuts should also run the **runtime copy** at `~/MySpammy`, not the
+Shortcuts should run the **runtime copy** at `~/MySpammy`, not the
 development copy in `~/Documents/Projects/MySpammy`.
 
 ### One-time setup
@@ -439,9 +359,6 @@ cd ~/MySpammy && /Library/Developer/CommandLineTools/usr/bin/python3 digest.py >
 5. Turn **off** "Ask Before Running" so it runs silently.
 6. Repeat for **Spam Digest**, at a later time on the same day, also Daily.
 
-Shortcuts cannot reproduce the normal Lingon configuration of running the
-sweep every 10 minutes.
-
 **Verifying it actually ran:** these automations run silently in the
 background with no visible confirmation. Check `~/MySpammy/run.log` after
 a scheduled time passes to confirm the script executed.
@@ -460,10 +377,10 @@ rather than the whole day's accumulated sweep history.
 | `VERSION` | Single project-wide version number (e.g. `1.0.1`), bumped on any release regardless of which files changed. Matches the git tag for that release (e.g. `v1.0.1`) and the version cited in each changed file's own `Change log:` docstring entry. |
 | `domain_check.py` | DNS-based domain existence check for sender domains -- used by `sweep.py` for the hardcoded Spam Domain check, and by `debug_spam.py` |
 | `debug_spam.py` | Diagnostic tool: shows what's extracted from each spam message, whether rules match, and the Spam Domain check's verdict -- does NOT delete anything |
-| `sweep.py` | Scans Spam and processes matching messages each time it is run. Under the recommended Lingon configuration, it runs every 10 minutes. It runs the hardcoded Spam Domain check first, then `config.json` rules. |
+| `sweep.py` | Scans Spam and processes matching messages each time it is run. Under the recommended Shortcuts configuration, it runs once daily. It runs the hardcoded Spam Domain check first, then `config.json` rules. |
 | `digest.py` | Sends the daily summary email, normally run once a day |
-| `Spam Sweep.sh` | Shell wrapper used by Lingon to run `sweep.py` from the runtime copy at `~/MySpammy` |
-| `Spam Digest.sh` | Shell wrapper used by Lingon to run `digest.py` from the runtime copy at `~/MySpammy` |
+| `Spam Sweep.sh` | Shell wrapper used by Shortcuts to run `sweep.py` from the runtime copy at `~/MySpammy` |
+| `Spam Digest.sh` | Shell wrapper used by Shortcuts to run `digest.py` from the runtime copy at `~/MySpammy` |
 | `config.json` | Your editable rules and digest recipient (does not affect the hardcoded Spam Domain check) |
 | `credentials.json` | Your Gmail address + app password (create from `credentials.json.example`, do not share or commit) |
 | `log.jsonl` | Deletion log since the last digest (auto-managed) |
