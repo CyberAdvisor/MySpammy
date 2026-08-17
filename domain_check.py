@@ -20,6 +20,12 @@ mail from a domain but hosts no website on it). Such a domain would show
 as "does not resolve" here even though it's completely real. This is a
 known tradeoff, accepted after the empirical comparison above showed no
 disagreements in practice for the spam actually being seen.
+
+Version: 1.0.4
+
+Change log:
+  - v1.0.4 (2026-08-17): Treat resolver failures other than an explicit
+    no-such-name result as inconclusive so they cannot trigger deletion.
 """
 import socket
 from typing import Optional
@@ -48,17 +54,26 @@ def dns_resolves(domain: str) -> Optional[bool]:
     """Check whether a domain has any DNS A record, using only the
     standard library (socket.gethostbyname).
 
-    Returns True if it resolves, False if it definitively doesn't
-    (NXDOMAIN/no such host), or None if the check itself was inconclusive
-    for some other reason (rare).
+    Returns True if it resolves, False only when the resolver explicitly
+    reports that the name does not exist, or None if the check itself was
+    inconclusive for some other reason (including a temporary resolver
+    failure).
     """
     if not domain:
         return None
     try:
         socket.gethostbyname(domain)
         return True
-    except socket.gaierror:
-        return False
+    except socket.gaierror as error:
+        # gethostbyname() reports several address-resolution failures as
+        # gaierror. Only EAI_NONAME is a definitive "name does not exist"
+        # answer; EAI_AGAIN and other values can be transient or otherwise
+        # inconclusive and must not become a deletion signal.
+        no_name_errors = {socket.EAI_NONAME}
+        no_data = getattr(socket, "EAI_NODATA", None)
+        if no_data is not None:
+            no_name_errors.add(no_data)
+        return False if error.errno in no_name_errors else None
     except Exception:
         return None
 

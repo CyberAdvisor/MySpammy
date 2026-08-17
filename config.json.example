@@ -1,6 +1,7 @@
 {
   "digest_recipient": "you@example.com",
   "rule_deleted_summary_only": true,
+  "spam_domain_perm_delete": false,
   "rules": [
     {
       "name": "SAMPLE_subject_example",

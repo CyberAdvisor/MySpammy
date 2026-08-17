@@ -1,5 +1,12 @@
 # Gmail Spam Cleaner
 
+## Change log
+
+- **v1.0.4 (2026-08-17):** Spam Domain matches now honor
+  `spam_domain_perm_delete`, which defaults to recoverable Trash moves. DNS
+  resolver failures are now treated as inconclusive unless the resolver
+  explicitly reports that the domain does not exist.
+
 ## Why this exists
 
 Gmail's spam filter catches a lot, but it isn't perfect -- every few days
@@ -98,6 +105,7 @@ Also set `digest_recipient` to your real email address (it starts as the placeho
 
 - `digest_recipient`: your real email address, as above.
 - `rule_deleted_summary_only` (optional, defaults to `false`): if `true`, the digest's **Rule Deleted** section shows a per-rule count breakdown (e.g. `Top Stories: 2`) instead of itemized `From`/`Subject` detail for each match. Only affects **Rule Deleted** -- **Rule Trashed** is always itemized regardless of this setting.
+- `spam_domain_perm_delete` (optional, defaults to `false`): controls whether a Spam Domain match is permanently deleted or moved to Trash. See section 6 for the safety details.
 
 ## 6. Automatic "Spam Domain" check (always runs; deletion type is configurable)
 

@@ -19,6 +19,12 @@ Sends a daily digest email with these sections:
     effect.
 
 Intended to run once every 24 hours via a scheduled automation, at a fixed time.
+
+Version: 1.0.4
+
+Change log:
+  - v1.0.4 (2026-08-17): Synchronized module version metadata with the
+    Spam Domain deletion-safety release.
 """
 from datetime import datetime, timezone
 from email.mime.text import MIMEText

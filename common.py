@@ -8,7 +8,12 @@ Google Cloud Console setup required.
 Used by sweep.py (deletes matching spam) and digest.py (sends the daily
 summary).
 
+Version: 1.0.4
+
 Change log:
+  - v1.0.4 (2026-08-17): Synchronized module version metadata for the
+    release that makes Spam Domain deletions honor the configured recovery
+    policy and treats non-definitive DNS failures as inconclusive.
   - v1.0.1 (2026-08-13): Removed unused rules_need_body() -- it was never
     called anywhere in the codebase (sweep.py always decodes the full
     body via extract_fields() regardless of whether any rule needs it,
@@ -542,4 +547,3 @@ def clear_run_log() -> None:
     that one fresh entry for this digest run.
     """
     open(RUN_LOG_PATH, "w", encoding="utf-8").close()
-

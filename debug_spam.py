@@ -17,6 +17,12 @@ exactly what the code sees.
 Usage:
     python3 debug_spam.py            # check all rules against all spam
     python3 debug_spam.py 42         # only inspect message index 42 in full
+
+Version: 1.0.4
+
+Change log:
+  - v1.0.4 (2026-08-17): Synchronized module version metadata with the
+    Spam Domain deletion-safety release.
 """
 import sys
 
