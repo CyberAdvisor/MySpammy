@@ -21,9 +21,11 @@ as "does not resolve" here even though it's completely real. This is a
 known tradeoff, accepted after the empirical comparison above showed no
 disagreements in practice for the spam actually being seen.
 
-Version: 1.0.4
+Version: 1.0.5
 
 Change log:
+  - v1.0.5 (2026-08-17): Synchronized module version metadata with the
+    logging and digest traceability release.
   - v1.0.4 (2026-08-17): Treat resolver failures other than an explicit
     no-such-name result as inconclusive so they cannot trigger deletion.
 """

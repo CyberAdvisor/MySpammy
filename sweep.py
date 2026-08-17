@@ -29,9 +29,11 @@ only rewritten if at least one rule was actually hit this run, to avoid
 needless diffs on days with no matches. This does not apply to the
 hardcoded Spam Domain check, which has no config.json entry.
 
-Version: 1.0.4
+Version: 1.0.5
 
 Change log:
+  - v1.0.5 (2026-08-17): Include the release version in deletion records and
+    the completion line captured by run.log.
   - v1.0.4 (2026-08-17): Honor spam_domain_perm_delete for Spam Domain
     matches; the default now follows the documented recoverable Trash policy.
 """
@@ -51,6 +53,7 @@ from common import (
     permanently_delete_message,
     append_log,
     logger,
+    PROJECT_VERSION,
     local_timestamp,
     local_date,
     save_config,
@@ -163,6 +166,7 @@ def run():
                     "subject": fields["subject"],
                     "matched_rule": matched_rule,
                     "deletion_type": deletion_type,
+                    "version": PROJECT_VERSION,
                 })
                 deleted_count += 1
 
@@ -183,7 +187,10 @@ def run():
             pass
         imap.logout()
 
-    print(f"[{local_timestamp()}] Sweep complete: {deleted_count} message(s) deleted out of {total_count} in spam.")
+    print(
+        f"[{local_timestamp()}] Sweep v{PROJECT_VERSION} complete: "
+        f"{deleted_count} message(s) deleted out of {total_count} in spam."
+    )
 
 
 if __name__ == "__main__":

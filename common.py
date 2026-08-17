@@ -8,9 +8,11 @@ Google Cloud Console setup required.
 Used by sweep.py (deletes matching spam) and digest.py (sends the daily
 summary).
 
-Version: 1.0.4
+Version: 1.0.5
 
 Change log:
+  - v1.0.5 (2026-08-17): Exposed the project version to operational logs and
+    digest output so each recorded action identifies its release.
   - v1.0.4 (2026-08-17): Synchronized module version metadata for the
     release that makes Spam Domain deletions honor the configured recovery
     policy and treats non-definitive DNS failures as inconclusive.
@@ -53,13 +55,30 @@ LOG_JSONL_PATH = os.path.join(BASE_DIR, "log.jsonl")
 STATE_PATH = os.path.join(BASE_DIR, "state.json")
 ERROR_LOG_PATH = os.path.join(BASE_DIR, "errors.log")
 RUN_LOG_PATH = os.path.join(BASE_DIR, "run.log")
+VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
+
+
+def load_project_version(path: str = VERSION_PATH) -> str:
+    """Return the canonical release version from VERSION.
+
+    The value is included in operational logs and digest output so behavior
+    can be traced to the exact code release that produced it.
+    """
+    with open(path, "r", encoding="utf-8") as f:
+        version = f.read().strip()
+    if not version:
+        raise RuntimeError(f"VERSION is empty at {path}.")
+    return version
+
+
+PROJECT_VERSION = load_project_version()
 
 # Errors go to a dedicated file so a broken rule or connection hiccup never
 # gets lost in stdout when run as a background automation.
 logging.basicConfig(
     filename=ERROR_LOG_PATH,
     level=logging.WARNING,
-    format="%(asctime)s %(levelname)s %(message)s",
+    format=f"%(asctime)s %(levelname)s version={PROJECT_VERSION} %(message)s",
 )
 logger = logging.getLogger("gmail_spam_cleaner")
 

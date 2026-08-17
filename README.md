@@ -2,6 +2,8 @@
 
 ## Change log
 
+- **v1.0.5 (2026-08-17):** Deletion records, error logs, sweep completion
+  lines, and digest email subjects and bodies now identify the running version.
 - **v1.0.4 (2026-08-17):** Spam Domain matches now honor
   `spam_domain_perm_delete`, which defaults to recoverable Trash moves. DNS
   resolver failures are now treated as inconclusive unless the resolver

@@ -20,9 +20,11 @@ Sends a daily digest email with these sections:
 
 Intended to run once every 24 hours via a scheduled automation, at a fixed time.
 
-Version: 1.0.4
+Version: 1.0.5
 
 Change log:
+  - v1.0.5 (2026-08-17): Include the release version in the digest subject,
+    body, and completion line captured by run.log.
   - v1.0.4 (2026-08-17): Synchronized module version metadata with the
     Spam Domain deletion-safety release.
 """
@@ -47,6 +49,7 @@ from common import (
     logger,
     local_timestamp,
     MOUNTAIN_TZ,
+    PROJECT_VERSION,
     SPAM_FOLDER,
 )
 from sweep import SPAM_DOMAIN_RULE_NAME
@@ -97,7 +100,10 @@ def build_digest_body(
     rule_deleted_summary_only: bool = False,
 ) -> str:
     lines = []
-    lines.append(f"Gmail Spam Cleaner -- Daily Digest ({local_timestamp()})")
+    lines.append(
+        f"Gmail Spam Cleaner v{PROJECT_VERSION} -- Daily Digest "
+        f"({local_timestamp()})"
+    )
     lines.append("")
 
     dns_deleted_entries = [
@@ -206,7 +212,10 @@ def send_digest(sender_email: str, recipient: str, body: str):
     message = MIMEText(body)
     message["From"] = sender_email
     message["To"] = recipient
-    message["Subject"] = f"Spam Cleaner Digest - {datetime.now(MOUNTAIN_TZ).strftime('%Y-%m-%d')}"
+    message["Subject"] = (
+        f"Spam Cleaner Digest v{PROJECT_VERSION} - "
+        f"{datetime.now(MOUNTAIN_TZ).strftime('%Y-%m-%d')}"
+    )
 
     smtp = get_smtp_connection()
     try:
@@ -261,7 +270,7 @@ def run():
     save_state(state)
 
     print(
-        f"[{local_timestamp()}] Digest sent to {recipient}: {len(deleted_entries)} deleted, "
+        f"[{local_timestamp()}] Digest v{PROJECT_VERSION} sent to {recipient}: {len(deleted_entries)} deleted, "
         f"{len(remaining)} remaining, {len(error_lines)} error(s)."
     )
 
