@@ -4,3 +4,4 @@ credentials.json
 state.json
 log.jsonl
 config.json
+__pycache__/
