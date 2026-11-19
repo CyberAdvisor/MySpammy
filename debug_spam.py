@@ -1,5 +1,6 @@
 """
-Diagnostic tool -- does NOT delete anything.
+Diagnostic tool -- does NOT delete anything, and does not mark messages
+as read (fetches use BODY.PEEK[]).
 
 Connects to Spam, and for every message currently there, prints:
   - subject / from
@@ -18,9 +19,12 @@ Usage:
     python3 debug_spam.py            # check all rules against all spam
     python3 debug_spam.py 42         # only inspect message index 42 in full
 
-Version: 1.0.5
+Version: 1.0.7
 
 Change log:
+  - v1.0.7 (2026-11-19): Fetch with BODY.PEEK[] so inspecting Spam no longer
+    marks messages as read. A non-numeric message index now prints a usage
+    message instead of crashing with a traceback.
   - v1.0.5 (2026-08-17): Synchronized module version metadata with the
     logging and digest traceability release.
   - v1.0.4 (2026-08-17): Synchronized module version metadata with the
@@ -56,7 +60,10 @@ def describe_structure(msg, indent=""):
 
 
 def run():
-    only_index = int(sys.argv[1]) if len(sys.argv) > 1 else None
+    try:
+        only_index = int(sys.argv[1]) if len(sys.argv) > 1 else None
+    except ValueError:
+        raise SystemExit("Usage: python3 debug_spam.py [message_index]")
 
     config = load_config()
     rules = compile_rules(config)
@@ -83,7 +90,7 @@ def run():
             if only_index is not None and i != only_index:
                 continue
 
-            status, msg_data = imap.uid("fetch", uid, "(RFC822)")
+            status, msg_data = imap.uid("fetch", uid, "(BODY.PEEK[])")
             if status != "OK" or not msg_data or msg_data[0] is None:
                 print(f"[{i}] uid={uid.decode()} FAILED TO FETCH")
                 continue

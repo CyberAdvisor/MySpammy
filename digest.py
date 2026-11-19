@@ -1,7 +1,9 @@
 """
 Sends a daily digest email with these sections:
   - Errors: any errors.log entries since the last digest
-  - Remaining: messages still sitting in Spam (condensed: From/Subject)
+  - Remaining: messages still sitting in Spam (condensed: From/Subject).
+    The header always shows the true total in Spam; at most
+    MAX_REMAINING_LISTED messages are itemized.
   - Rule Trashed: config.json rule matches without perm_delete (moved to
     Trash, same condensed format)
   - Rule Deleted: config.json rule matches with "perm_delete": true
@@ -20,20 +22,27 @@ Sends a daily digest email with these sections:
 
 Intended to run once every 24 hours via a scheduled automation, at a fixed time.
 
-Version: 1.0.5
+Version: 1.0.7
 
 Change log:
+  - v1.0.7 (2026-11-19): Remaining header shows the true total in Spam
+    (noting when the list is capped). Fetch with BODY.PEEK[] so building
+    the digest no longer marks Spam messages as read. Errors logged during
+    the digest run are kept for the next digest instead of being cleared.
+    rule_deleted_summary_only is now validated as true/false. Errors header
+    reads "since last digest". Removed unused state.json write.
   - v1.0.5 (2026-08-17): Include the release version in the digest subject,
     body, and completion line captured by run.log.
   - v1.0.4 (2026-08-17): Synchronized module version metadata with the
     Spam Domain deletion-safety release.
 """
-from datetime import datetime, timezone
+from datetime import datetime
+from typing import Optional
 from email.mime.text import MIMEText
 
 from common import (
     load_config,
-    get_spam_domain_perm_delete,
+    get_bool_setting,
     load_credentials,
     get_imap_connection,
     get_smtp_connection,
@@ -44,8 +53,6 @@ from common import (
     read_error_log,
     clear_error_log,
     clear_run_log,
-    load_state,
-    save_state,
     logger,
     local_timestamp,
     MOUNTAIN_TZ,
@@ -57,8 +64,13 @@ from sweep import SPAM_DOMAIN_RULE_NAME
 MAX_REMAINING_LISTED = 200  # sanity cap so a huge spam folder doesn't blow up the email
 
 
-def list_current_spam_summaries(imap) -> list[dict]:
-    """Fetch subject/from for messages currently in Spam."""
+def list_current_spam_summaries(imap) -> tuple[list[dict], int]:
+    """Fetch subject/from for messages currently in Spam.
+
+    Returns (summaries, total_in_spam). At most MAX_REMAINING_LISTED
+    messages are fetched and summarized; total_in_spam is the full count,
+    so the digest can report it even when the list is capped.
+    """
     summaries = []
 
     status, _ = imap.select(SPAM_FOLDER)
@@ -69,10 +81,11 @@ def list_current_spam_summaries(imap) -> list[dict]:
     if status != "OK":
         raise RuntimeError(f"IMAP search failed (status={status})")
 
-    uids = data[0].split()[:MAX_REMAINING_LISTED]
+    all_uids = data[0].split()
+    uids = all_uids[:MAX_REMAINING_LISTED]
 
     for uid in uids:
-        status, msg_data = imap.uid("fetch", uid, "(RFC822)")
+        status, msg_data = imap.uid("fetch", uid, "(BODY.PEEK[])")
         if status != "OK" or not msg_data or msg_data[0] is None:
             logger.warning("Failed to fetch spam message UID %s for digest", uid.decode())
             continue
@@ -89,7 +102,7 @@ def list_current_spam_summaries(imap) -> list[dict]:
             "subject": fields["subject"],
         })
 
-    return summaries
+    return summaries, len(all_uids)
 
 
 def build_digest_body(
@@ -98,7 +111,17 @@ def build_digest_body(
     error_lines: list[str],
     spam_domain_perm_delete: bool = False,
     rule_deleted_summary_only: bool = False,
+    remaining_total: Optional[int] = None,
 ) -> str:
+    """Build the plain-text digest body.
+
+    remaining_total is the full number of messages in Spam; it defaults to
+    len(remaining) when not given. If it exceeds len(remaining), the
+    Remaining header notes that only the first len(remaining) are listed.
+    """
+    if remaining_total is None:
+        remaining_total = len(remaining)
+
     lines = []
     lines.append(
         f"Gmail Spam Cleaner v{PROJECT_VERSION} -- Daily Digest "
@@ -135,7 +158,7 @@ def build_digest_body(
         lines.append("")
 
     # Errors
-    lines.append(f"Errors in the last 24 hours: {len(error_lines)}")
+    lines.append(f"Errors since last digest: {len(error_lines)}")
     lines.append("-" * 50)
     if error_lines:
         for line in error_lines:
@@ -145,7 +168,10 @@ def build_digest_body(
     lines.append("")
 
     # Remaining -- still sitting in Spam
-    lines.append(f"Remaining: {len(remaining)}")
+    remaining_header = f"Remaining: {remaining_total}"
+    if remaining_total > len(remaining):
+        remaining_header += f" (showing first {len(remaining)})"
+    lines.append(remaining_header)
     lines.append("-" * 50)
     if remaining:
         for r in remaining:
@@ -244,7 +270,7 @@ def run():
 
     imap = get_imap_connection()
     try:
-        remaining = list_current_spam_summaries(imap)
+        remaining, remaining_total = list_current_spam_summaries(imap)
     finally:
         try:
             imap.close()
@@ -258,20 +284,18 @@ def run():
         deleted_entries,
         remaining,
         error_lines,
-        get_spam_domain_perm_delete(config),
-        config.get("rule_deleted_summary_only", False),
+        get_bool_setting(config, "spam_domain_perm_delete"),
+        get_bool_setting(config, "rule_deleted_summary_only"),
+        remaining_total,
     )
     send_digest(creds["email"], recipient, body)
 
     clear_log()
-    clear_error_log()
-    state = load_state()
-    state["last_digest_run"] = datetime.now(timezone.utc).isoformat()
-    save_state(state)
+    clear_error_log(len(error_lines))
 
     print(
         f"[{local_timestamp()}] Digest v{PROJECT_VERSION} sent to {recipient}: {len(deleted_entries)} deleted, "
-        f"{len(remaining)} remaining, {len(error_lines)} error(s)."
+        f"{remaining_total} remaining, {len(error_lines)} error(s)."
     )
 
 

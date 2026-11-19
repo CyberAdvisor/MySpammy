@@ -2,6 +2,13 @@
 
 ## Change log
 
+- **v1.0.7 (2026-11-19):** Senders under common two-part country suffixes
+  (`co.uk`, `com.au`, etc.) are now DNS-checked on the correct domain
+  instead of the suffix itself. Permanent deletion now removes only the
+  matched message. Scanning Spam no longer marks messages as read. The
+  digest's Remaining count shows the true total, errors logged during a
+  digest run carry over to the next digest, and `rule_deleted_summary_only`
+  is validated as `true`/`false`. Removed the unused `state.json`.
 - **v1.0.6 (2026-11-19):** `__pycache__/` is now gitignored so Python
   bytecode caches created when the scripts run are never committed.
 - **v1.0.5 (2026-08-17):** Deletion records, error logs, sweep completion
@@ -108,7 +115,7 @@ Also set `digest_recipient` to your real email address (it starts as the placeho
 **Top-level settings (outside `rules`):**
 
 - `digest_recipient`: your real email address, as above.
-- `rule_deleted_summary_only` (optional, defaults to `false`): if `true`, the digest's **Rule Deleted** section shows a per-rule count breakdown (e.g. `Top Stories: 2`) instead of itemized `From`/`Subject` detail for each match. Only affects **Rule Deleted** -- **Rule Trashed** is always itemized regardless of this setting.
+- `rule_deleted_summary_only` (optional, defaults to `false`): if `true`, the digest's **Rule Deleted** section shows a per-rule count breakdown (e.g. `Top Stories: 2`) instead of itemized `From`/`Subject` detail for each match. Only affects **Rule Deleted** -- **Rule Trashed** is always itemized regardless of this setting. An invalid value (anything that isn't `true`/`false`) is treated as `false`.
 - `spam_domain_perm_delete` (optional, defaults to `false`): controls whether a Spam Domain match is permanently deleted or moved to Trash. See section 6 for the safety details.
 
 ## 6. Automatic "Spam Domain" check (always runs; deletion type is configurable)
@@ -121,16 +128,16 @@ the rule name `Spam Domain` and deleted. `config.json` rules are skipped
 entirely for that message.
 
 The check doesn't look up the sender's full domain as written -- it first
-reduces it to the last two dot-separated labels (e.g. `mail.spam.xyz`
-becomes `spam.xyz`) and checks that instead, on the assumption this is the
-registrable domain. **Known limitation:** this reduction doesn't account
-for multi-part TLDs like `.co.uk` -- for a domain such as
-`example.co.uk`, it would incorrectly take `co.uk` as the "registrable"
-part rather than `example.co.uk`, which can produce an incorrect DNS
-check for such domains. This is a deliberate simplification (implementing
-the full public suffix list was judged unnecessary complexity for a
-diagnostic check) and is worth knowing about if you see an unexpected
-result for a domain with a compound TLD.
+reduces it to the registrable domain and checks that instead. Normally
+that's the last two dot-separated labels (e.g. `mail.spam.xyz` becomes
+`spam.xyz`). For common two-part country suffixes -- `co.uk`, `org.uk`,
+`com.au`, `net.au`, `co.nz`, and a few others listed in
+`MULTI_PART_SUFFIXES` in `domain_check.py` -- the last three labels are
+kept, so `mail.example.co.uk` is checked as `example.co.uk` rather than
+`co.uk`. **Known limitation:** this is a short hand-maintained list, not
+the full public suffix list. A legitimate sender under a two-part suffix
+that isn't listed could still be checked on the suffix alone and flagged;
+if that happens, add the suffix to `MULTI_PART_SUFFIXES`.
 
 Domain check results are cached for the duration of a single `sweep.py`
 run (many spam messages in one run often share a sender domain), so a
@@ -364,8 +371,7 @@ rather than the whole day's accumulated sweep history.
 | `config.json` | Your editable rules and digest recipient (does not affect the hardcoded Spam Domain check) |
 | `credentials.json` | Your Gmail address + app password (create from `credentials.json.example`, do not share or commit) |
 | `log.jsonl` | Deletion log since the last digest (auto-managed) |
-| `state.json` | Tracks last digest run time (auto-managed) |
-| `errors.log` | Connection/rule errors (auto-managed) |
+| `errors.log` | Connection/rule errors (auto-managed) -- lines reported in a digest are removed after it's sent; anything logged during the digest run is kept for the next one |
 | `run.log` | Sweep/digest completion log written by your scheduler's shell redirect (not by the Python scripts directly) -- reset by `digest.py` at the start of each of its runs, so it never grows unbounded |
 
 ## Safety notes
@@ -373,6 +379,8 @@ rather than the whole day's accumulated sweep history.
 - **Config.json rule matches go to Trash by default** (30-day recovery window) -- a rule that's too broad is recoverable, not catastrophic. A rule can opt into **permanent deletion** instead by setting `"perm_delete": true` (see section 5); do this only for rules you're confident can't produce a false positive.
 - **The hardcoded Spam Domain check always runs**, but whether it permanently deletes or moves to Trash is controlled by `spam_domain_perm_delete` in `config.json` (defaults to `false`/Trash). Permanent deletion has no recovery window; Trash gives 30 days.
 - `log.jsonl` records `"deletion_type": "trash"` or `"permanent"` for every deletion. The digest email lists sections in this order: **Errors**, **Remaining**, **Rule Trashed**, **Rule Deleted**, then a **DNS Deleted** or **DNS Trashed** section for the hardcoded check depending on the active `spam_domain_perm_delete` setting (both only appear together if you changed that setting mid-period). **Rule Deleted** is itemized by default, or shown as a per-rule count breakdown if `rule_deleted_summary_only` is `true` (see section 5); **Rule Trashed** is always itemized.
+- The digest's **Remaining** header shows the true number of messages in Spam; at most 200 are itemized, and the header notes when the list is capped.
+- `sweep.py`, `digest.py`, and `debug_spam.py` fetch messages without marking them as read, so reading Spam never changes a message's read/unread state.
 - A rule with invalid `field` or unparseable regex is skipped and logged to `errors.log`, not silently ignored or crash-inducing.
 - The hardcoded Spam Domain check (see section 6) only ever deletes on an explicit "this domain doesn't resolve" result -- a failed or inconclusive check never triggers a deletion by itself.
 - `credentials.json` grants mail access to your account -- keep it out of version control (see `.gitignore`) and revoke the app password from your Google account if it's ever exposed.

@@ -1,6 +1,6 @@
 """
 Domain existence check for sender domains, used by sweep.py's hardcoded
-"Spam Domain" check and by debug_spam.py.
+"Spam Domain" check (which decides deletions) and by debug_spam.py.
 
 Originally used RDAP (Registration Data Access Protocol, the structured
 JSON replacement for WHOIS) to check whether a sender's domain is actually
@@ -21,9 +21,13 @@ as "does not resolve" here even though it's completely real. This is a
 known tradeoff, accepted after the empirical comparison above showed no
 disagreements in practice for the spam actually being seen.
 
-Version: 1.0.5
+Version: 1.0.7
 
 Change log:
+  - v1.0.7 (2026-11-19): registrable_domain() now keeps three labels for
+    common two-part public suffixes (co.uk, com.au, etc.), so a sender like
+    example.co.uk is checked as example.co.uk rather than co.uk -- which has
+    no A record and would otherwise be flagged as a Spam Domain.
   - v1.0.5 (2026-08-17): Synchronized module version metadata with the
     logging and digest traceability release.
   - v1.0.4 (2026-08-17): Treat resolver failures other than an explicit
@@ -33,22 +37,35 @@ import socket
 from typing import Optional
 
 
-def registrable_domain(domain: str) -> str:
-    """Best-effort guess at the registrable (second-level) domain by taking
-    the last two dot-separated labels, e.g. 'a.b.c.example.com' -> 'example.com'.
+# Common two-label public suffixes under which the registrable domain is
+# three labels long (e.g. example.co.uk). Checking only the last two labels
+# for these would look up the suffix itself (co.uk), which has no A record
+# and would wrongly flag every legitimate sender under it as a Spam Domain.
+# A deliberately short, hand-maintained list rather than the full public
+# suffix list -- extend it if a legitimate sender under another two-part
+# suffix is ever caught.
+MULTI_PART_SUFFIXES = {
+    "co.uk", "org.uk", "ac.uk", "gov.uk", "me.uk", "ltd.uk", "plc.uk",
+    "com.au", "net.au", "org.au", "edu.au", "gov.au", "id.au",
+    "co.nz", "co.za", "co.jp", "com.br", "com.mx",
+}
 
-    This doesn't account for public-suffix exceptions like 'co.uk' (where
-    the registrable domain is actually the third-level label), but that's
-    a deliberate simplification: implementing the full public suffix list
-    would add real complexity for a diagnostic tool, and the vast majority
-    of spam domains seen in practice use simple TLDs (.com, .us, .xyz, etc.)
-    where this heuristic is correct.
+
+def registrable_domain(domain: str) -> str:
+    """Best-effort guess at the registrable domain.
+
+    Normally the last two dot-separated labels, e.g. 'a.b.c.example.com'
+    -> 'example.com'. When the last two labels are a known two-part public
+    suffix (see MULTI_PART_SUFFIXES), the last three are kept instead, e.g.
+    'mail.example.co.uk' -> 'example.co.uk'.
     """
     if not domain:
         return domain
     parts = domain.split(".")
     if len(parts) < 2:
         return domain
+    if len(parts) >= 3 and ".".join(parts[-2:]).lower() in MULTI_PART_SUFFIXES:
+        return ".".join(parts[-3:])
     return ".".join(parts[-2:])
 
 

@@ -29,9 +29,13 @@ only rewritten if at least one rule was actually hit this run, to avoid
 needless diffs on days with no matches. This does not apply to the
 hardcoded Spam Domain check, which has no config.json entry.
 
-Version: 1.0.5
+Version: 1.0.7
 
 Change log:
+  - v1.0.7 (2026-11-19): Fetch with BODY.PEEK[] so scanning Spam no longer
+    marks messages as read. Sender domains are lowercased before the Spam
+    Domain check so the per-run cache treats case variants as one domain.
+    Reads spam_domain_perm_delete via common.get_bool_setting().
   - v1.0.5 (2026-08-17): Include the release version in deletion records and
     the completion line captured by run.log.
   - v1.0.4 (2026-08-17): Honor spam_domain_perm_delete for Spam Domain
@@ -47,7 +51,7 @@ from common import (
     extract_fields,
     match_message,
     get_rule_perm_delete,
-    get_spam_domain_perm_delete,
+    get_bool_setting,
     email_address,
     trash_message,
     permanently_delete_message,
@@ -66,18 +70,19 @@ SPAM_DOMAIN_RULE_NAME = "Spam Domain"
 
 
 def sender_domain(from_header: str) -> str:
-    """Extract the domain portion of the sender's email address, or ''
-    if it can't be determined."""
+    """Extract the domain portion of the sender's email address,
+    lowercased (domains are case-insensitive), or '' if it can't be
+    determined."""
     addr = email_address(from_header)
     if "@" not in addr:
         return ""
-    return addr.split("@", 1)[1]
+    return addr.split("@", 1)[1].strip().lower()
 
 
 def run():
     config = load_config()
     rules = compile_rules(config)
-    spam_domain_perm_delete = get_spam_domain_perm_delete(config)
+    spam_domain_perm_delete = get_bool_setting(config, "spam_domain_perm_delete")
 
     if not rules:
         logger.warning("No enabled/valid config.json rules found -- only the hardcoded Spam Domain check will run.")
@@ -101,7 +106,7 @@ def run():
         total_count = len(uids)
 
         for uid in uids:
-            status, msg_data = imap.uid("fetch", uid, "(RFC822)")
+            status, msg_data = imap.uid("fetch", uid, "(BODY.PEEK[])")
             if status != "OK" or not msg_data or msg_data[0] is None:
                 logger.warning("Failed to fetch message UID %s", uid.decode())
                 continue

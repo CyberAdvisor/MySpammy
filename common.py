@@ -8,9 +8,16 @@ Google Cloud Console setup required.
 Used by sweep.py (deletes matching spam) and digest.py (sends the daily
 summary).
 
-Version: 1.0.5
+Version: 1.0.7
 
 Change log:
+  - v1.0.7 (2026-11-19): permanently_delete_message() now expunges only the
+    target message (UID EXPUNGE) instead of every \\Deleted-flagged message
+    in Spam. clear_error_log() now removes only the lines a digest reported,
+    keeping anything logged during the digest run. Added get_bool_setting()
+    for validated top-level true/false settings (replaces
+    get_spam_domain_perm_delete()). Removed unused state.json handling
+    (STATE_PATH, load_state(), save_state()).
   - v1.0.5 (2026-08-17): Exposed the project version to operational logs and
     digest output so each recorded action identifies its release.
   - v1.0.4 (2026-08-17): Synchronized module version metadata for the
@@ -52,7 +59,6 @@ BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 CREDENTIALS_PATH = os.path.join(BASE_DIR, "credentials.json")
 CONFIG_PATH = os.path.join(BASE_DIR, "config.json")
 LOG_JSONL_PATH = os.path.join(BASE_DIR, "log.jsonl")
-STATE_PATH = os.path.join(BASE_DIR, "state.json")
 ERROR_LOG_PATH = os.path.join(BASE_DIR, "errors.log")
 RUN_LOG_PATH = os.path.join(BASE_DIR, "run.log")
 VERSION_PATH = os.path.join(BASE_DIR, "VERSION")
@@ -148,18 +154,17 @@ def record_rule_hit(config: dict, rule_name: str, date_str: str) -> bool:
     return False
 
 
-def get_spam_domain_perm_delete(config: dict) -> bool:
-    """Read the global 'spam_domain_perm_delete' setting: whether the
-    hardcoded Spam Domain check (see sweep.py) permanently deletes
-    (true) or moves to Trash (false, the default). Any non-boolean value
-    is logged and treated as False -- a config mistake must never
-    silently escalate to permanent, unrecoverable deletion."""
-    value = config.get("spam_domain_perm_delete", False)
+def get_bool_setting(config: dict, key: str) -> bool:
+    """Read a top-level true/false setting from config.json, e.g.
+    'spam_domain_perm_delete' or 'rule_deleted_summary_only'.
+
+    Missing means False. Any non-boolean value (e.g. the string "false",
+    which would otherwise be truthy) is logged and treated as False -- the
+    safe default, so a config mistake can never silently escalate to
+    permanent, unrecoverable deletion."""
+    value = config.get(key, False)
     if not isinstance(value, bool):
-        logger.warning(
-            "'spam_domain_perm_delete' must be true/false, got %r -- defaulting to false (Trash, not permanent)",
-            value,
-        )
+        logger.warning("'%s' must be true/false, got %r -- defaulting to false", key, value)
         return False
     return value
 
@@ -303,12 +308,17 @@ def permanently_delete_message(imap, uid: bytes) -> bool:
     leaves the message in All Mail. This function assumes the caller has
     the Spam folder selected (imap.select(SPAM_FOLDER)) when it's called.
 
+    Uses UID EXPUNGE (UIDPLUS extension, supported by Gmail) so only this
+    message is expunged -- a plain EXPUNGE would also remove any other
+    message in Spam left flagged \\Deleted (e.g. by an earlier run whose
+    expunge failed), with no log entry for it.
+
     Returns True only if BOTH the flag and expunge operations report OK.
     """
     store_status, _ = imap.uid("store", uid, "+FLAGS", "(\\Deleted)")
     if store_status != "OK":
         return False
-    expunge_status, _ = imap.expunge()
+    expunge_status, _ = imap.uid("expunge", uid)
     return expunge_status == "OK"
 
 
@@ -492,20 +502,8 @@ def extract_fields(msg: Message) -> dict:
 
 
 # ---------------------------------------------------------------------------
-# Log / state persistence
+# Log persistence
 # ---------------------------------------------------------------------------
-
-def load_state() -> dict:
-    if not os.path.exists(STATE_PATH):
-        return {"last_digest_run": None}
-    with open(STATE_PATH, "r", encoding="utf-8") as f:
-        return json.load(f)
-
-
-def save_state(state: dict) -> None:
-    with open(STATE_PATH, "w", encoding="utf-8") as f:
-        json.dump(state, f, indent=2)
-
 
 def append_log(entry: dict) -> None:
     with open(LOG_JSONL_PATH, "a", encoding="utf-8") as f:
@@ -536,23 +534,28 @@ def read_error_log() -> list[str]:
         return [line.rstrip("\n") for line in f if line.strip()]
 
 
-def clear_error_log() -> None:
-    """Truncate errors.log after its contents have been reported in a digest.
+def clear_error_log(reported_count: int) -> None:
+    """Remove the first reported_count lines of errors.log -- the ones a
+    digest just reported -- and keep any lines logged after that (e.g.
+    warnings raised during the digest run itself), so they're reported in
+    the next digest instead of being lost.
 
     Safe to call even though the logging module's FileHandler keeps its own
     file descriptor open in append mode: on POSIX, append-mode writes always
     seek to end-of-file first, so a subsequent write from that handler lands
-    correctly after this truncation rather than leaving a gap.
+    correctly after this rewrite rather than leaving a gap.
     """
-    open(ERROR_LOG_PATH, "w", encoding="utf-8").close()
+    remaining = read_error_log()[reported_count:]
+    with open(ERROR_LOG_PATH, "w", encoding="utf-8") as f:
+        f.writelines(line + "\n" for line in remaining)
 
 
 def clear_run_log() -> None:
     """Truncate run.log so it doesn't grow forever.
 
     run.log isn't written by this Python code directly -- it's populated by
-    the shell wrapper script's own `>> run.log 2>&1` redirect around each
-    sweep.py/digest.py invocation (see README section 10/11). Because
+    the scheduled Shortcuts' own `>> run.log 2>&1` redirect around each
+    sweep.py/digest.py invocation (see README section 10). Because
     that's a plain append with nothing ever resetting it, the file would
     otherwise accumulate one line per run indefinitely.
 
