@@ -2,6 +2,9 @@
 
 ## Change log
 
+- **v1.0.8 (2026-11-19):** Documentation-only release: README setup steps,
+  Spam Domain wording, file table, and change log history corrected; code
+  docstrings and `requirements.txt` brought in line with current behavior.
 - **v1.0.7 (2026-11-19):** Senders under common two-part country suffixes
   (`co.uk`, `com.au`, etc.) are now DNS-checked on the correct domain
   instead of the suffix itself. Permanent deletion now removes only the
@@ -17,6 +20,13 @@
   `spam_domain_perm_delete`, which defaults to recoverable Trash moves. DNS
   resolver failures are now treated as inconclusive unless the resolver
   explicitly reports that the domain does not exist.
+- **v1.0.3 (2026-08-17):** Consolidated to a single project folder
+  (`~/Documents/Projects/MySpammy`); removed the separate runtime/development
+  copies.
+- **v1.0.2 (2026-08-17):** Replaced Lingon scheduling with daily macOS
+  Shortcuts automations.
+- **v1.0.1 (2026-08-13):** Removed unused code (`rules_need_body()`) and
+  documented the DNS check's limitations.
 
 ## Why this exists
 
@@ -84,7 +94,13 @@ cp credentials.json.example credentials.json
 
 ## 5. Edit your rules
 
-Open `config.json`. It ships with four sample rules, all `"enabled": false`,
+Create your `config.json` from the example:
+
+```bash
+cp config.json.example config.json
+```
+
+Open `config.json`. It starts with five sample rules, all `"enabled": false`,
 purely to show the format -- they will never run as-is.
 
 Each rule matches text against subject/from/to/body via regex:
@@ -123,9 +139,10 @@ Also set `digest_recipient` to your real email address (it starts as the placeho
 Before any `config.json` rule is checked, `sweep.py` looks up the sender's
 domain via DNS (see `domain_check.py`). If the domain **doesn't resolve at
 all** -- no DNS record exists, or the domain has no dot in it and so can't
-be a real domain to begin with -- the message is immediately logged with
-the rule name `Spam Domain` and deleted. `config.json` rules are skipped
-entirely for that message.
+be a real domain to begin with -- the message is deleted -- moved to Trash
+by default, or permanently deleted if `spam_domain_perm_delete` is `true` --
+and, once the deletion succeeds, logged with the rule name `Spam Domain`.
+`config.json` rules are skipped entirely for that message.
 
 The check doesn't look up the sender's full domain as written -- it first
 reduces it to the registrable domain and checks that instead. Normally
@@ -237,7 +254,7 @@ Reference patterns to adapt, organized by field. All match case-insensitively al
 {"name": "decoy_filler_text", "enabled": true, "field": "body", "pattern": "Top Stories of the Day:.*-----"}
 ```
 
-That last one (`decoy_filler_text`) is worth calling out: some spam includes a garbage/word-salad `text/plain` part specifically to defeat text-based filters, while the real payload (a tracking link, the actual pitch) sits in the `text/html` part. Since `body` extraction combines both parts (see the Gotcha note above), a rule targeting the decoy text itself still catches these reliably.
+That last one (`decoy_filler_text`) is worth calling out: some spam includes a garbage/word-salad `text/plain` part specifically to defeat text-based filters, while the real payload (a tracking link, the actual pitch) sits in the `text/html` part. Since `body` extraction combines both parts (both the `text/plain` and `text/html` parts are searched), a rule targeting the decoy text itself still catches these reliably.
 
 Tips for writing your own:
 
@@ -366,8 +383,6 @@ rather than the whole day's accumulated sweep history.
 | `debug_spam.py` | Diagnostic tool: shows what's extracted from each spam message, whether rules match, and the Spam Domain check's verdict -- does NOT delete anything |
 | `sweep.py` | Scans Spam and processes matching messages each time it is run. Under the recommended Shortcuts configuration, it runs once daily. It runs the hardcoded Spam Domain check first, then `config.json` rules. |
 | `digest.py` | Sends the daily summary email, normally run once a day |
-| `Spam Sweep.sh` | Shell wrapper used by Shortcuts to run `sweep.py` from `~/Documents/Projects/MySpammy` |
-| `Spam Digest.sh` | Shell wrapper used by Shortcuts to run `digest.py` from `~/Documents/Projects/MySpammy` |
 | `config.json` | Your editable rules and digest recipient (does not affect the hardcoded Spam Domain check) |
 | `credentials.json` | Your Gmail address + app password (create from `credentials.json.example`, do not share or commit) |
 | `log.jsonl` | Deletion log since the last digest (auto-managed) |

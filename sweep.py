@@ -13,11 +13,10 @@ the check is inconclusive (DNS error, unexpected failure), the message is
 NOT flagged on that basis alone; it falls through to normal config.json rule
 matching instead. A lookup failure must never cause a deletion by itself.
 
-Messages matched by a config.json rule instead go to Trash (see
-common.trash_message) rather than being permanently deleted -- Trash
-gives a 30-day recovery window in case a rule is too broad, which matters
-more for regex rules than for the DNS check, since DNS non-resolution is
-a much more mechanically certain signal.
+Messages matched by a config.json rule go to Trash by default (see
+common.trash_message), giving a 30-day recovery window in case a rule is
+too broad. A rule can opt into permanent deletion with "perm_delete": true
+(see common.permanently_delete_message).
 
 Every deletion is appended to log.jsonl for digest.py to summarize later.
 Connection and per-message errors go to errors.log rather than stopping
@@ -29,9 +28,11 @@ only rewritten if at least one rule was actually hit this run, to avoid
 needless diffs on days with no matches. This does not apply to the
 hardcoded Spam Domain check, which has no config.json entry.
 
-Version: 1.0.7
+Version: 1.0.8
 
 Change log:
+  - v1.0.8 (2026-11-19): Docstring now describes per-rule perm_delete and
+    drops reasoning left over from the earlier deletion policy.
   - v1.0.7 (2026-11-19): Fetch with BODY.PEEK[] so scanning Spam no longer
     marks messages as read. Sender domains are lowercased before the Spam
     Domain check so the per-run cache treats case variants as one domain.

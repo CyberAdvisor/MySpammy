@@ -8,9 +8,11 @@ Google Cloud Console setup required.
 Used by sweep.py (deletes matching spam) and digest.py (sends the daily
 summary).
 
-Version: 1.0.7
+Version: 1.0.8
 
 Change log:
+  - v1.0.8 (2026-11-19): Docstrings for compile_rules(), match_message(),
+    and extract_fields() now list the 'to' field alongside subject/from/body.
   - v1.0.7 (2026-11-19): permanently_delete_message() now expunges only the
     target message (UID EXPUNGE) instead of every \\Deleted-flagged message
     in Spam. clear_error_log() now removes only the lines a digest reported,
@@ -171,7 +173,7 @@ def get_bool_setting(config: dict, key: str) -> bool:
 
 def compile_rules(config: dict) -> list[CompiledRule]:
     """Validate and compile every enabled rule's regex (field in
-    subject/from/body + pattern).
+    subject/from/to/body + pattern).
 
     A rule with a bad field name or a regex that fails to compile is
     logged to errors.log and skipped -- it never silently matches
@@ -221,7 +223,7 @@ def compile_rules(config: dict) -> list[CompiledRule]:
 def match_message(fields: dict, rules: list[CompiledRule]) -> Optional[str]:
     """Return the name of the first rule that matches, or None.
 
-    `fields` is a dict with keys subject/from/body (values may be empty
+    `fields` is a dict with keys subject/from/to/body (values may be empty
     strings if unavailable).
     """
     for rule in rules:
@@ -457,7 +459,7 @@ def email_address(from_header: str) -> str:
 
 
 def extract_fields(msg: Message) -> dict:
-    """Pull subject/from/body out of a parsed email.message.Message.
+    """Pull subject/from/to/body out of a parsed email.message.Message.
 
     Spam senders produce all kinds of malformed MIME (bad encoded-word
     padding, invalid charsets, broken multipart structure, etc.), and new
