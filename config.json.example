@@ -16,6 +16,12 @@
       "pattern": "@shady-domain\\.(com|net)"
     },
     {
+      "name": "SAMPLE_deep_subdomain_sender",
+      "enabled": false,
+      "field": "from",
+      "pattern": "@(?:(?:[a-z0-9-]+\\.){4,}[a-z0-9-]+(?<!\\.uk)(?<!\\.au)|(?:[a-z0-9-]+\\.){5,}(?:uk|au))(?![a-z0-9.-])"
+    },
+    {
       "name": "SAMPLE_to_example",
       "enabled": false,
       "field": "to",

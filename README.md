@@ -2,6 +2,9 @@
 
 ## Change log
 
+- **v1.0.9 (2026-11-19):** `config.json.example` and the README rule
+  examples now include a disabled sample `deep_subdomain_sender` rule that
+  flags sender domains with unusually many subdomain levels.
 - **v1.0.8 (2026-11-19):** Documentation-only release: README setup steps,
   Spam Domain wording, file table, and change log history corrected; code
   docstrings and `requirements.txt` brought in line with current behavior.
@@ -100,7 +103,7 @@ Create your `config.json` from the example:
 cp config.json.example config.json
 ```
 
-Open `config.json`. It starts with five sample rules, all `"enabled": false`,
+Open `config.json`. It starts with six sample rules, all `"enabled": false`,
 purely to show the format -- they will never run as-is.
 
 Each rule matches text against subject/from/to/body via regex:
@@ -243,7 +246,15 @@ Reference patterns to adapt, organized by field. All match case-insensitively al
 ```json
 {"name": "known_spam_domains", "enabled": true, "field": "from", "pattern": "@(shady-domain1|shady-domain2)\\.(com|net)"}
 {"name": "suspicious_tld", "enabled": true, "field": "from", "pattern": "@.*\\.(xyz|top|click|info)"}
+{"name": "deep_subdomain_sender", "enabled": true, "field": "from", "pattern": "@(?:(?:[a-z0-9-]+\\.){4,}[a-z0-9-]+(?<!\\.uk)(?<!\\.au)|(?:[a-z0-9-]+\\.){5,}(?:uk|au))(?![a-z0-9.-])"}
 ```
+
+`deep_subdomain_sender` flags sender domains with four or more periods
+(e.g. `x@6ucmmwrh75.sys3177.sys1400.scoutsidered.nl`), or five or more for
+domains ending in `.uk` or `.au`, where legitimate addresses like
+`news@em.mail.example.co.uk` (four periods) already use an extra level. Only the part after
+the `@` is counted, so dots in the sender's name (`john.q.public@...`)
+don't matter.
 
 **Body**
 
